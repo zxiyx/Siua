@@ -1,0 +1,46 @@
+﻿<suki:SukiWindow xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="400" d:DesignHeight="350"
+        Width="400" Height="350"
+        xmlns:vm="using:Siua.ViewModels"
+        xmlns:suki="https://github.com/kikipoulet/SukiUI"
+        xmlns:icons="clr-namespace:Material.Icons.Avalonia;assembly=Material.Icons.Avalonia"
+        x:Class="Siua.Views.Windows.AiSettingsView"
+        x:DataType="vm:AiSettingsViewModel"
+        Title="设置AI">
+    <Grid Margin="20">
+        <suki:GlassCard Width="300" Margin="0,10,0,35">
+            <suki:BusyArea IsBusy="{Binding IsAdding}">
+                <StackPanel >
+                    <TextBlock Margin="6,0,0,3"
+                                       FontWeight="DemiBold" 
+                                       Foreground="{DynamicResource SukiLowText}"
+                                       Text="主机地址" />
+                            <TextBox suki:TextBoxExtensions.Prefix="{icons:MaterialIconExt Kind=Cloud}"
+                                     Classes="clearButton"
+                                     Text="{Binding Settings.Ais[0].Host}"
+                                     Watermark="input host" />
+                    <TextBlock Margin="6,10,0,3"
+                               FontWeight="DemiBold" 
+                               Foreground="{DynamicResource SukiLowText}"
+                               Text="ApiKey" />
+                    <TextBox suki:TextBoxExtensions.Prefix="{icons:MaterialIconExt Kind=Key}"
+                             Classes="clearButton"
+                             Text="{Binding Settings.Ais[0].ApiKey}"
+                             Watermark="input key" />
+                    <TextBlock Margin="6,10,0,3"
+                               FontWeight="DemiBold"
+                               Foreground="{DynamicResource SukiLowText}"
+                               Text="模型昵称" />
+                    <TextBox suki:TextBoxExtensions.Prefix="{icons:MaterialIconExt Kind=RobotLove}"
+                             Classes="clearButton" TextWrapping="Wrap"
+                             Text="{Binding Settings.Ais[0].ModelName}"
+                             Watermark="model name"/>
+                </StackPanel>
+            </suki:BusyArea>
+        </suki:GlassCard>
+    </Grid>
+        
+</suki:SukiWindow>

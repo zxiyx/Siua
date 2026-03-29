@@ -1,0 +1,41 @@
+﻿<suki:SukiWindow xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="520" d:DesignHeight="500"
+        Width="520" Height="500"
+        x:Class="Siua.Views.Windows.CourseEditView"
+        xmlns:vm="using:Siua.ViewModels"
+        xmlns:suki="https://github.com/kikipoulet/SukiUI"
+        xmlns:icons="clr-namespace:Material.Icons.Avalonia;assembly=Material.Icons.Avalonia"
+        x:DataType="vm:CourseEditViewModel"
+        Title="添加或修改课程地址">
+        <Grid Margin="15">
+           <suki:GlassCard CornerRadius="25" Margin="10,5,10,30">
+               <suki:BusyArea IsBusy="{Binding IsSaving}">
+                   <suki:GroupBox>
+                           <suki:GroupBox.Header>
+                                   <StackPanel Spacing="10" Orientation="Horizontal" Height="40">
+                                           <icons:MaterialIcon Height="20" Width="20" Kind="BookEdit" 
+                                                               Foreground="{DynamicResource SukiPrimaryColor}"/>
+                                           <TextBlock Text="课程列表" FontSize="16" VerticalAlignment="Center" FontWeight="Bold"/>
+                                           
+                                   </StackPanel>
+                           </suki:GroupBox.Header>
+                           <StackPanel Orientation="Vertical" Spacing="5">
+                                   <StackPanel Spacing="10" Orientation="Horizontal">
+                                           <TextBox Text="{Binding NewCourse}" Width="295" Classes="clearButton"
+                                                    FontSize="16" HorizontalAlignment="Left" Watermark="input course address"/>
+                                           <Button suki:ButtonExtensions.Icon="{icons:MaterialIconExt Kind=Add}"  Margin="0,0,0,0"
+                                                   Classes="Flat" DockPanel.Dock="Right" HorizontalAlignment="Right" Command="{Binding AddCourse}"/>
+                                           <Button suki:ButtonExtensions.Icon="{icons:MaterialIconExt Kind=Minimize}"
+                                                   Classes="Flat" DockPanel.Dock="Right" HorizontalAlignment="Right" Command="{Binding SubCourse}"/>
+                                   </StackPanel>
+                                   <TreeView  ItemsSource="{Binding Settings.Courses}" SelectedItem="{Binding SelectedCourse}"/>
+                           </StackPanel>
+                           
+                   </suki:GroupBox>
+              </suki:BusyArea>
+           </suki:GlassCard>  
+        </Grid>
+</suki:SukiWindow>

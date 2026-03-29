@@ -1,0 +1,129 @@
+﻿<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:suki="clr-namespace:SukiUI.Controls;assembly=SukiUI"
+             xmlns:vm="using:Siua.ViewModels"
+             xmlns:p="https://github.com/kikipoulet/SukiUI" 
+             xmlns:icons="clr-namespace:Material.Icons.Avalonia;assembly=Material.Icons.Avalonia"
+             mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
+             x:DataType="vm:SettingsViewModel"
+             x:Class="Siua.Views.Pages.SettingsView">
+    <ScrollViewer>
+        <StackPanel HorizontalAlignment="Stretch" Margin="30" 
+                    VerticalAlignment="Center">
+            <!--  browser  -->
+            <suki:GlassCard CornerRadius="25,25,0,0">
+                <suki:GroupBox >
+                        <suki:GroupBox.Header>
+                            <StackPanel Spacing="10" Orientation="Horizontal" Height="40">
+                                <icons:MaterialIcon Height="20" Width="20" Kind="Web" 
+                                                    Foreground="{DynamicResource SukiPrimaryColor}"/>
+                                <TextBlock Text="浏览器行为" FontSize="16" VerticalAlignment="Center" FontWeight="Bold"/>
+                            </StackPanel>
+                        </suki:GroupBox.Header>
+                    <DockPanel HorizontalSpacing="10">
+                        <icons:MaterialIcon DockPanel.Dock="Left"   Kind="Earth" Height="20" Width="20"
+                                            Foreground="{DynamicResource SukiLowText}"/>
+                        <StackPanel >
+                            <TextBlock Text="浏览器设置" FontSize="16" FontWeight="Bold"/>
+                            <TextBlock Text="选择用于进行自动化行为的浏览器" FontSize="16" Foreground="{DynamicResource SukiLowText}" />
+                        </StackPanel>
+                        <ComboBox DockPanel.Dock="Right" Width="150" ItemsSource="{Binding Browsers}"
+                                  SelectedItem="{Binding CurrentBrowser}" 
+                                  HorizontalAlignment="Right"/>
+                    </DockPanel>
+                    </suki:GroupBox>
+            </suki:GlassCard>
+            <suki:GlassCard CornerRadius="0,0,0,0">
+                <DockPanel HorizontalSpacing="10">
+                    <icons:MaterialIcon DockPanel.Dock="Left"   Kind="Cookie" Height="20" Width="20"
+                                        Foreground="{DynamicResource SukiLowText}"/>
+                    <StackPanel>
+                        <TextBlock Text="保存Cookie" FontSize="16" FontWeight="Bold"/>
+                        <TextBlock Text="下次使用浏览器不需要登录账号" FontSize="16" Foreground="{DynamicResource SukiLowText}" />
+                    </StackPanel>
+                    <ToggleButton Classes="Switch" DockPanel.Dock="Right" HorizontalAlignment="Right" IsChecked="{Binding Settings.SaveCookies}"/>
+                </DockPanel>
+            </suki:GlassCard>
+            <suki:GlassCard CornerRadius="0,0,0,0">
+                <DockPanel HorizontalSpacing="10">
+                    <icons:MaterialIcon DockPanel.Dock="Left"   Kind="FolderText" Height="20" Width="20"
+                                        Foreground="{DynamicResource SukiLowText}"/>
+                    <StackPanel>
+                        <TextBlock Text="用户数据目录" FontSize="16" FontWeight="Bold"/>
+                        <TextBlock Text="包括浏览器数据和Cookie等" FontSize="16" Foreground="{DynamicResource SukiLowText}" />
+                    </StackPanel>
+                    <Button p:ButtonExtensions.Icon="{icons:MaterialIconExt Kind=FolderAdd}" Classes="Flat" DockPanel.Dock="Right" HorizontalAlignment="Right" Content="更改用户数据目录"/>
+                </DockPanel>
+            </suki:GlassCard>
+            <suki:GlassCard CornerRadius="0,0,25,25">
+                <DockPanel HorizontalSpacing="10">
+                    <icons:MaterialIcon DockPanel.Dock="Left"   Kind="BookOpenVariant" Height="20" Width="20"
+                                        Foreground="{DynamicResource SukiLowText}"/>
+                    <StackPanel>
+                        <TextBlock Text="课程网址" FontSize="16" FontWeight="Bold"/>
+                        <TextBlock Text="含学习通课程的网址" FontSize="16" Foreground="{DynamicResource SukiLowText}" />
+                    </StackPanel>
+                    <Button p:ButtonExtensions.Icon="{icons:MaterialIconExt Kind=BookEdit}" Command="{Binding ShowCourseList}"
+                            Classes="Flat" DockPanel.Dock="Right" HorizontalAlignment="Right" Content="课程列表"/>
+                </DockPanel>
+            </suki:GlassCard>
+            <!--  AI   -->
+            <suki:GlassCard Margin="0,20,0,0" CornerRadius="25,25,0,0">
+                <suki:GroupBox >
+                        <suki:GroupBox.Header>
+                            <StackPanel Spacing="10" Orientation="Horizontal" Height="40">
+                                <icons:MaterialIcon Height="20" Width="20" Kind="Robot" 
+                                                    Foreground="{DynamicResource SukiPrimaryColor}"/>
+                                <TextBlock Text="AI模型匹配" FontSize="16" VerticalAlignment="Center" FontWeight="Bold"/>
+                            </StackPanel>
+                        </suki:GroupBox.Header>
+                    <DockPanel HorizontalSpacing="10">
+                        <icons:MaterialIcon DockPanel.Dock="Left"   Kind="RobotConfused" Height="20" 
+                                            Foreground="{DynamicResource SukiLowText}"/>
+                        <StackPanel >
+                            <TextBlock Text="AI模型" FontSize="16" FontWeight="Bold"/>
+                            <TextBlock Text="当前使用模型" FontSize="16" Foreground="{DynamicResource SukiLowText}" />
+                        </StackPanel>
+                        <ComboBox DockPanel.Dock="Right" Width="150" SelectedItem="{Binding Settings.Ais[0]}"
+                                  ItemsSource="{Binding Settings.Ais}" 
+                                  HorizontalAlignment="Right">
+                            <ComboBox.ItemTemplate>
+                                <DataTemplate>
+                                    <TextBlock Text="{Binding ModelName}"/>
+                                </DataTemplate>
+                            </ComboBox.ItemTemplate>
+                        </ComboBox>
+                    </DockPanel>
+                    </suki:GroupBox>
+            </suki:GlassCard>
+            <suki:GlassCard CornerRadius="0,0,0,0">
+                <DockPanel HorizontalSpacing="10">
+                    <icons:MaterialIcon DockPanel.Dock="Left"   Kind="RobotConfused" Height="20" 
+                                        Foreground="{DynamicResource SukiLowText}"/>
+                    <StackPanel>
+                        <TextBlock Text="AI答题间隔" FontSize="16" FontWeight="Bold"/>
+                        <TextBlock Text="根据模型限制每分钟请求数填写" FontSize="16" Foreground="{DynamicResource SukiLowText}"  />
+                    </StackPanel>
+                    <TextBox DockPanel.Dock="Right" HorizontalAlignment="Right" Width="100" Text="{Binding Settings.AiAnsweringInterval}" TextAlignment="Center"/>
+
+                </DockPanel>
+            </suki:GlassCard>
+            <suki:GlassCard CornerRadius="0,0,25,25">
+                <DockPanel HorizontalSpacing="10">
+                    <icons:MaterialIcon DockPanel.Dock="Left"   Kind="RobotConfused" Height="20" 
+                                        Foreground="{DynamicResource SukiLowText}"/>
+                    <StackPanel>
+                        <TextBlock Text="AI模型设置" FontSize="16" FontWeight="Bold"/>
+                        <TextBlock Text="添加或更改AI模型" FontSize="16" Foreground="{DynamicResource SukiLowText}"  />
+                    </StackPanel>
+                    <Button p:ButtonExtensions.Icon="{icons:MaterialIconExt Kind=Settings}" Command="{Binding ShowAiSetting}"
+                            Classes="Flat" DockPanel.Dock="Right" HorizontalAlignment="Right" />
+
+                </DockPanel>
+            </suki:GlassCard>
+        </StackPanel>
+    </ScrollViewer>
+    
+</UserControl>

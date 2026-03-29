@@ -1,0 +1,29 @@
+﻿<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="using:Siua.ViewModels"
+             mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
+             xmlns:suki="clr-namespace:SukiUI.Controls;assembly=SukiUI"
+             xmlns:icons="clr-namespace:Material.Icons.Avalonia;assembly=Material.Icons.Avalonia"
+             x:DataType="vm:LogViewModel"
+             x:Class="Siua.Views.Pages.LogView">
+    
+    <suki:GlassCard Margin="20">
+        <suki:GroupBox>
+            <suki:GroupBox.Header>
+                <StackPanel Spacing="10" Orientation="Horizontal" >
+                    <icons:MaterialIcon Height="20" Width="20" Kind="Notebook" 
+                                        Foreground="{DynamicResource SukiPrimaryColor}"/>
+                    <TextBlock Text="运行日志" FontSize="16" VerticalAlignment="Center" FontWeight="Bold" HorizontalAlignment="Stretch"/>
+                </StackPanel>
+            </suki:GroupBox.Header>
+            <TextBox IsReadOnly="True"  Text="{Binding LogContent}" HorizontalAlignment="Stretch" Width="700"
+                     HorizontalContentAlignment="Left" VerticalContentAlignment="Top" VerticalAlignment="Stretch" TextWrapping="Wrap" BorderThickness="0"/>
+        </suki:GroupBox>
+    </suki:GlassCard>
+    
+    
+    
+    
+</UserControl>
