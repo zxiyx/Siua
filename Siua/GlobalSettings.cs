@@ -29,10 +29,10 @@ public partial class GlobalSettings:ObservableObject
     private double _videoPlayRate  = 1.0;
     
     [ObservableProperty]
-    private bool _usedOcr  = false;
+    private bool _usedAiToOcr  = false;
     
     [ObservableProperty]
-    private bool _autoTest = true;
+    private bool _autoTest = false;
     
     [ObservableProperty]
     private bool _saveCookies  = true;

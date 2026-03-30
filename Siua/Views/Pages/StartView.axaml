@@ -127,10 +127,10 @@
                     <icons:MaterialIcon DockPanel.Dock="Left"   Kind="Camera" Height="20" Width="20"
                                         Foreground="{DynamicResource SukiLowText}"/>
                     <StackPanel>
-                        <TextBlock Text="OCR识别" FontSize="16" FontWeight="Bold"/>
-                        <TextBlock Text="使用OCR文字识别(不开会乱码)" FontSize="16" Foreground="{DynamicResource SukiLowText}" />
+                        <TextBlock Text="AI文字识别" FontSize="16" FontWeight="Bold"/>
+                        <TextBlock Text="调用模型进行文字识别，需配置可识别图像的模型" FontSize="16" Foreground="{DynamicResource SukiLowText}" />
                     </StackPanel>
-                    <ToggleButton Classes="Switch" IsChecked="{Binding Settings.UsedOcr}" DockPanel.Dock="Right" HorizontalAlignment="Right"/>
+                    <ToggleButton Classes="Switch" IsChecked="{Binding Settings.UsedAiToOcr}" DockPanel.Dock="Right" HorizontalAlignment="Right"/>
                 </DockPanel>
             </suki:GlassCard>
             <suki:GlassCard CornerRadius="0,0,25,25">

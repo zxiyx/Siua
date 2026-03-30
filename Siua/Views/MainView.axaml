@@ -50,7 +50,7 @@
                     <icons:MaterialIcon Kind="Forum" />
                 </Button>
                 <Button Classes="Basic"
-                        CommandParameter="https://github.com/zxiyx"
+                        CommandParameter="https://github.com/zxiyx/Siua"
                         ToolTip.Tip="to my github">
                     <icons:MaterialIcon Kind="Github" />
                 </Button>

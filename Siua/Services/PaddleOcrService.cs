@@ -40,12 +40,19 @@ public class PaddleOcrService
         }
         _logService.AddLog("OCR模型已加载");
     }
-    public string RunOCR(string imagePath)
+    public string? RunOCR(string imagePath)
     {
-        using (Mat src = Cv2.ImRead(imagePath))
+        try
         {
-            PaddleOcrResult result = _all.Run(src);
-            return result.Text;
+            using (Mat src = Cv2.ImRead(imagePath))
+            {
+                PaddleOcrResult result = _all.Run(src);
+                return result.Text;
+            }
+        }
+        catch (Exception e)
+        {
+            return null;
         }
     }
 }

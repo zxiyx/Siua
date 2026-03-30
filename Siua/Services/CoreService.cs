@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Runtime.ConstrainedExecution;
 using System.Security;
 using System.Text;
 using System.Threading.Tasks;
@@ -181,7 +182,6 @@ public class CoreService : ICoreService
                 _logService.AddLog($"搜索到章节测试 : {ct.ChapterTitle}"); 
                 if (ct.IsCompleted)
                 { 
-                    //await ct.WaitFotGetTotalScore(); 
                     _logService.AddLog($"该章节测试已完成"); 
                 } 
                 if (ct.HasQuestion && !ct.IsCompleted) 
@@ -189,25 +189,51 @@ public class CoreService : ICoreService
                     foreach (var q in ct.Questions) 
                     { 
                         await q.GetAnswers(); 
-                        if (_settings.UsedOcr) 
+                        if (_settings.UsedAiToOcr) 
                         { 
                             var bytes = await q.GetImageForQuestion(); 
-                            await File.WriteAllBytesAsync(fp, bytes); 
-                            _sbQuestion.Append(_ocrService.RunOCR(fp)); 
+                            await File.WriteAllBytesAsync(fp, bytes);
+                            var r = await _aiControlService.GetTextFromImage(fp);
+                            if (r==null)
+                            {
+                                _settings.AutoTest = false;
+                                _logService.AddLog("OCR识图异常，已自动关闭自动答题");
+                                goto nextchapter;
+                            }
+                            else
+                            {
+                                _sbQuestion.Append(r); 
+                            }
                         }
                         else 
                         { 
+                            var bytes = await q.GetImageForQuestion(); 
+                            await File.WriteAllBytesAsync(fp, bytes); 
+                            var r =_ocrService.RunOCR(fp);
+                            if (r==null)
+                            {
+                                _settings.AutoTest = false;
+                                _logService.AddLog("OCR识图异常，已自动关闭自动答题");
+                                goto nextchapter;
+                            }
+                            else
+                            {
+                                _sbQuestion.Append(r); 
+                            }
+                            /*
                             _sbQuestion.Append($"标题：{q.Title}\n"); 
                             foreach (var i in q.Answers) 
                             { 
                                 _sbQuestion.Append($"选项 {await i.Key.InnerTextAsync()} : {await i.Value.InnerTextAsync()}\n"); 
                             } 
+                            */
                         } 
                         var ans = await _aiControlService.GetAnswer(_sbQuestion.ToString()); 
                         if (ans == null) 
                         { 
-                            _logService.AddLog("Ai配置异常！程序已暂停"); 
-                            break; 
+                            _settings.AutoTest = false;
+                            _logService.AddLog("Ai配置异常！已关闭自动答题"); 
+                            goto nextchapter;
                         } 
                         foreach (var a in q.Answers) 
                         { 
@@ -226,6 +252,7 @@ public class CoreService : ICoreService
                 } 
             } 
         } 
+        nextchapter:
         _logService.AddLog("进入下一节..."); 
         await pr.NextPageAsync(); 
         await Task.Delay(_settings.ChapterJumpInterval);
