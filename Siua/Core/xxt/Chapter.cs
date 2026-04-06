@@ -6,65 +6,71 @@ namespace Siua.Core;
 
 public class Chapter
 {
-    private IElementHandle? data;
-    private IElementHandle catalog;
+    private ILocator? data;
+    private ILocator catalog;
     private List<SubChapter> subChapters = new();
     public List<SubChapter> SubChapters => subChapters;
     private string title;
-    
-    public string Title 
+
+    public string Title
     {
         get => title;
         set => title = value;
     }
-    public Chapter(IElementHandle? _data, IElementHandle _catalog)
+
+    public Chapter(ILocator? _data, ILocator _catalog)
     {
         data = _data;
         catalog = _catalog;
     }
-    
+
     public async Task<string> GetChapterTitle()
     {
-        title = await data.InnerTextAsync();
+        title = data == null ? string.Empty : await data.InnerTextAsync();
         return title;
     }
 
     public async Task GetSubChapters()
     {
-        var scs = await catalog.QuerySelectorAllAsync(".posCatalog_level ul li");
-        foreach (var sc in scs)
+        var scs = catalog.Locator(".posCatalog_level ul li");
+        var count = await scs.CountAsync();
+        for (int i = 0; i < count; i++)
         {
-            subChapters.Add(new SubChapter(await sc.QuerySelectorAsync(".posCatalog_name")));
+            var sc = scs.Nth(i);
+            subChapters.Add(new SubChapter(sc.Locator(".posCatalog_name")));
         }
     }
+
     public async Task Click()
     {
-        await data.ClickAsync();
+        if (data != null) await data.ClickAsync();
     }
 }
+
 public class SubChapter
 {
-    private IElementHandle? data;
+    private ILocator? data;
     private string title;
-    
-    public string Title 
+
+    public string Title
     {
         get => title;
         set => title = value;
     }
-    public SubChapter(IElementHandle? _data)
+
+    public SubChapter(ILocator? _data)
     {
         data = _data;
     }
+
     public async Task<string> GetSubChapterTitle()
     {
-        title = await data.InnerTextAsync();
+        title = data == null ? string.Empty : await data.InnerTextAsync();
         return title;
     }
 
     public async Task Click()
     {
-        await data.ClickAsync();
+        if (data != null) await data.ClickAsync();
     }
-    
 }

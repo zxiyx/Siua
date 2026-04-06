@@ -20,7 +20,7 @@
                                        Text="主机地址" />
                             <TextBox suki:TextBoxExtensions.Prefix="{icons:MaterialIconExt Kind=Cloud}"
                                      Classes="clearButton"
-                                     Text="{Binding Settings.Ais[0].Host}"
+                                     Text="{Binding Settings.CurrentAi.Domain}"
                                      Watermark="input host" />
                     <TextBlock Margin="6,10,0,3"
                                FontWeight="DemiBold" 
@@ -28,7 +28,7 @@
                                Text="ApiKey" />
                     <TextBox suki:TextBoxExtensions.Prefix="{icons:MaterialIconExt Kind=Key}"
                              Classes="clearButton"
-                             Text="{Binding Settings.Ais[0].ApiKey}"
+                             Text="{Binding Settings.CurrentAi.ApiKey}"
                              Watermark="input key" />
                     <TextBlock Margin="6,10,0,3"
                                FontWeight="DemiBold"
@@ -36,7 +36,7 @@
                                Text="模型昵称" />
                     <TextBox suki:TextBoxExtensions.Prefix="{icons:MaterialIconExt Kind=RobotLove}"
                              Classes="clearButton" TextWrapping="Wrap"
-                             Text="{Binding Settings.Ais[0].ModelName}"
+                             Text="{Binding Settings.CurrentAi.ModelName}"
                              Watermark="model name"/>
                 </StackPanel>
             </suki:BusyArea>

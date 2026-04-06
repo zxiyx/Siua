@@ -16,19 +16,22 @@ public class Columns
     }
     public async Task WaitColumnLoading()
     {
-       await page.WaitForSelectorAsync(".showcontent.posChapter");
+        await page.Locator(".showcontent.posChapter").First.WaitForAsync();
     }
-    private async Task<IReadOnlyList<IElementHandle>> GetColumnItems()
+
+    private ILocator GetColumnItems()
     {
-        return await page.QuerySelectorAllAsync("ul[style='padding-bottom:30px'] > li");
+        return page.Locator("ul[style='padding-bottom:30px'] > li");
     }
 
     public async Task GetChapters()
     {
-        var catalog = await GetColumnItems();
-        foreach (var c in catalog)
+        var catalog = GetColumnItems();
+        var count = await catalog.CountAsync();
+        for (int i = 0; i < count; i++)
         {
-            chapters.Add(new Chapter(await c.QuerySelectorAsync(".posCatalog_select.firstLayer"), c));
+            var c = catalog.Nth(i);
+            chapters.Add(new Chapter(c.Locator(".posCatalog_select.firstLayer"), c));
         }
     }
 }

@@ -7,11 +7,11 @@ namespace Siua.Core;
 public class Video
 {
     private IFrame frame;
-    private IElementHandle handle;
-    private IElementHandle videoElement;
+    private ILocator handle;
+    private ILocator videoElement;
 
     private readonly GlobalSettings _settings;
-    public Video(IElementHandle data ,GlobalSettings settings)
+    public Video(ILocator data, GlobalSettings settings)
     {
         handle = data;
         _settings = settings;
@@ -21,31 +21,36 @@ public class Video
     {
         try
         {
-            var iconHandle = await handle.QuerySelectorAsync("div.ans-job-icon.ans-job-icon-clear[aria-label='任务点未完成']");
-            return iconHandle == null;
+            var icon = handle.Locator("div.ans-job-icon.ans-job-icon-clear[aria-label='任务点未完成']");
+            return await icon.CountAsync() == 0;
         }
-        catch (Exception e)
+        catch
         {
-            return false;
+            return true;
         }
     }
     
 
     public async Task ControlVideos()
     {
-        //GetFrameAndVedio
-        var iframeElement = await handle.WaitForSelectorAsync("iframe");
-        frame = await iframeElement.ContentFrameAsync();
-        var div = await frame.QuerySelectorAsync("div.fullScreenContainer > #reader");
-        await div.WaitForSelectorAsync("video.vjs-tech");
-        videoElement = await div.QuerySelectorAsync("video.vjs-tech");
+        var iframeLocator = handle.Locator("iframe").First;
+        await iframeLocator.WaitForAsync();
+        var iframeElement = await iframeLocator.ElementHandleAsync();
+        frame = await iframeElement!.ContentFrameAsync();
+
+        var div = frame!.Locator("#reader");
+        if (await div.CountAsync() > 0)
+        {
+            videoElement = div.Locator("video.vjs-tech").First;
+        }
     }
 
    
     public async Task Play()
     {
         await videoElement.EvaluateAsync($@"
-    (async function() {{
+    (function() {{
+        window._videoCompleted = false;
         const VIDEO_PAUSED_CLASS = 'vjs-paused';
         const VIDEO_ENDED_CLASS = 'vjs-ended';
         const VIDEO_STARTED_CLASS = 'vjs-has-started';
@@ -55,7 +60,7 @@ public class Video
         const bigPlayBtn = document.querySelector('.vjs-big-play-button');
         
         if (!videoDiv || !playBtn) {{
-            console.log('未找到视频元素，跳过');
+            console.log('未找到视频元素');
             return;
         }}
         if (!videoDiv.classList.contains(VIDEO_STARTED_CLASS) && bigPlayBtn) {{
@@ -77,6 +82,7 @@ public class Video
             // 视频结束
             if (videoDiv.classList.contains(VIDEO_ENDED_CLASS)) {{
                 console.log('视频播放结束');
+                window._videoCompleted = true;
                 observer.disconnect();
                 return;
             }}
@@ -87,7 +93,6 @@ public class Video
                 // 延迟确认，避免误判
                 setTimeout(() => {{
                     if (videoDiv.classList.contains(VIDEO_PAUSED_CLASS)) {{
-                        // 点击播放按钮
                         if (playBtn && !videoDiv.classList.contains(VIDEO_ENDED_CLASS)) {{
                             playBtn.click();
                             console.log('已点击播放按钮');
@@ -101,13 +106,12 @@ public class Video
                 }}, 400);
             }}
         }});
-        // 监听 class
         observer.observe(videoDiv, {{ attributes: true, attributeFilter: ['class'] }});
         if (videoDiv.classList.contains(VIDEO_PAUSED_CLASS)) {{
             playBtn?.click();
         }}
     }})();
-    ",videoElement);
+    ");
     }
 
     public async Task<bool> TryFinishVideo()
@@ -138,13 +142,35 @@ public class Video
 })();
 ");
     }
-    public async Task WaitForVideoEnd(int timeout =6000000)
+    public async Task<bool> WaitForVideoEnd(int timeout = 3600000)
     {
-        await frame.WaitForFunctionAsync(
-            @"() => {
-            const videoDiv = document.getElementById('video');
-            return videoDiv && videoDiv.classList.contains('vjs-ended');
-        }",null,new (){Timeout =  timeout});
-        
+        try
+        {
+            await frame.WaitForFunctionAsync(
+                "() => window._videoCompleted === true",
+                null,
+                new() { Timeout = timeout, PollingInterval = 1000 }
+            );
+            return true;
+        }
+        catch (TimeoutException)
+        {
+            try
+            {
+                var videoDiv = frame.Locator("#video");
+                if (await videoDiv.CountAsync() > 0)
+                {
+                    var classAttr = await videoDiv.First.GetAttributeAsync("class");
+                    if (classAttr?.Contains("vjs-ended") == true) return true;
+                }
+            }
+            catch { /* 忽略 */ }
+            return false;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[Video] WaitForVideoEnd 异常：{ex.Message}");
+            return false;
+        }
     }
 }

@@ -1,13 +1,11 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.IO;
-using System.Runtime.ConstrainedExecution;
 using System.Security;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Playwright;
 using Microsoft.Win32;
-using Newtonsoft.Json;
 using Siua.Interfaces;
 using Siua.Core;
 
@@ -16,13 +14,14 @@ namespace Siua.Services;
 public class CoreService : ICoreService
 {
     private IPlaywright _playwright;
-    private IBrowserContext _context;
+    private IBrowser _context;
     private IPage _page;
     private StringBuilder _sbQuestion = new();
     private readonly ILogService _logService;
     private readonly GlobalSettings _settings;
     private readonly PaddleOcrService _ocrService;
     private readonly AiControlService _aiControlService;
+    private CancellationTokenSource _loginHeartbeatCts;
 
     public CoreService(ILogService logService, GlobalSettings settings,PaddleOcrService paddleOcrService,AiControlService aiControlService)
     {
@@ -36,13 +35,14 @@ public class CoreService : ICoreService
         _logService.Clear();
         _logService.AddLog($"Create Playwright");
         _playwright = await Playwright.CreateAsync();
-        var op = new BrowserTypeLaunchPersistentContextOptions()
+        var op = new BrowserTypeLaunchOptions()
         {
             Headless = false,
             Args = new[]
             {
                 "--disable-blink-features=AutomationControlled",
-                "--disable-site-isolation-trials"
+                "--disable-site-isolation-trials",
+                "--no-default-browser-check"
             }
         };
         if (_settings.BrowserCannel == "系统默认")
@@ -63,26 +63,10 @@ public class CoreService : ICoreService
                 
             };
         }
-        _context = await _playwright.Chromium.LaunchPersistentContextAsync(_settings.UserDataDir, op);
-        _page = _context.Pages.Count > 0 ? _context.Pages[0] : await _context.NewPageAsync();
+        _context = await _playwright.Chromium.LaunchAsync(op);
+        _page = await _context.NewPageAsync();
         _page.Console += async (sender, e) =>
         {
-    
-            /*
-            var details = new List<string>();
-            foreach (var arg in e.Args)
-            {
-                try
-                {
-                    var json = await arg.JsonValueAsync<string>();
-                    details.Add(json?.ToString() ?? "null");
-                }
-                catch
-                {
-                    details.Add(arg.ToString());
-                }
-            }
-            */
             try
             {
 
@@ -94,132 +78,154 @@ public class CoreService : ICoreService
             }
         };
         await _page.GotoAsync(_settings.Courses[0]);
-        await _page.WaitForLoadStateAsync(LoadState.Load);
+        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+        
+        
         if (_page.Url.Contains("passport", StringComparison.OrdinalIgnoreCase))
         {
             _logService.AddLog("检测到登录界面，请先登录.");
+            _logService.AddLog("等待登录中...");
+            await _page.WaitForURLAsync("**/mooc1.chaoxing.com/**", new() { Timeout = 300000 });
         }
-        _logService.AddLog("等待登录中...");
-        await _page.WaitForURLAsync("**/mooc1.chaoxing.com/**", new() { Timeout = 60000 });
-        _logService.AddLog("登录成功");
-        if (_settings.SaveCookies)
+
+        if (!_page.Url.Contains("passport", StringComparison.OrdinalIgnoreCase))
         {
-            await SaveCookies();
+            _logService.AddLog("登录成功");
         }
+        else
+        {
+            _logService.AddLog("登录状态异常,请重新启动");
+            return;
+        }
+        
+        StartLoginHeartbeat();
     }
 
+    private void StartLoginHeartbeat()
+    {
+        _loginHeartbeatCts = new CancellationTokenSource();
+        var token = _loginHeartbeatCts.Token;
+
+        _ = Task.Run(async () =>
+        {
+            while (!token.IsCancellationRequested)
+            {
+                try
+                {
+                    await Task.Delay(300000, token); 
+                    if (_page.Url.Contains("passport", StringComparison.OrdinalIgnoreCase) ||
+                        _page.Url == "https://i.chaoxing.com/base")
+                    {
+                        _logService.AddLog("检测到登录态失效，尝试恢复...");
+                        await _page.GotoAsync(_settings.Courses[0]);
+                        await _page.WaitForLoadStateAsync(LoadState.Load, new() { Timeout = 30000 });
+                        if (_page.Url.Contains("passport"))
+                        {
+                            _logService.AddLog("需要手动重新登录");
+                        }
+                        else
+                        {
+                            _logService.AddLog("登录态已恢复，继续刷课");
+                        }
+                    }
+                }
+                catch (OperationCanceledException) { break; }
+                catch (Exception ex)
+                {
+                    _logService.AddLog($"[心跳] 检测异常：{ex.Message}");
+                }
+            }
+        }, token);
+    }
+    public void StopLoginHeartbeat()
+    {
+        _loginHeartbeatCts?.Cancel();
+        _loginHeartbeatCts?.Dispose();
+    }
     private async Task SaveCookies()
     {
         var cookies = await _page.Context.CookiesAsync();
         await File.WriteAllTextAsync(Path.Combine(_settings.UserDataDir, "cookies.json"), System.Text.Json.JsonSerializer.Serialize(cookies));
     }
 
-    private async Task LoadCookies()
-    {
-        try
-        {
-            if (!_settings.SaveCookies) return;
-            var fp = Path.Combine(_settings.UserDataDir, "cookies.json");
-            if (!File.Exists(fp))
-            {
-                _logService?.AddLog("Cookies 文件不存在，跳过加载");
-                return;
-            }
-            
-            var json = await File.ReadAllTextAsync(fp);
-            var cookies = JsonConvert.DeserializeObject<List<Cookie>>(json);
-            
-            if (cookies != null && cookies.Count > 0)
-            {
-                await _context.AddCookiesAsync(cookies);
-                _logService?.AddLog($"Cookies 已加载");
-            }
-        }
-        catch (Exception ex)
-        {
-            _logService?.AddLog($"加载 Cookies 失败：{ex.Message}");
-        }
-    }
 
     public async Task ParsePage()
     {
-        _sbQuestion.Clear();
-        var pr = new PageResolver(_page, _settings);
-        await pr.WaitLoading();
-        await pr.ResolvePage();
-        if (pr.HasVideo) 
-        { 
-            foreach (var video in pr.Videos) 
+        try
+        {
+            _sbQuestion.Clear();
+            await _page.WaitForLoadStateAsync(LoadState.DOMContentLoaded);
+            PageResolver pr = new (_page, _settings);
+            await pr.WaitLoading();
+            await pr.ResolvePage();
+            
+            if (pr.HasVideo) 
             { 
-                if (!await video.IsCompleted()) 
+                foreach (var video in pr.Videos) 
                 { 
-                    _logService.AddLog("播放视频中...."); 
-                    await video.ControlVideos(); 
-                    await video.Play(); 
-                    if (_settings.TryFinishVideo)
-                    {
-                        if (await video.TryFinishVideo())
+                    if (!await video.IsCompleted()) 
+                    { 
+                        _logService.AddLog("播放视频中...."); 
+                        await video.ControlVideos(); 
+                        await video.Play(); 
+                        if (_settings.TryFinishVideo)
                         {
-                            _logService.AddLog("操控视频进度成功，视频播放完毕");
+                            if (await video.TryFinishVideo())
+                            {
+                                _logService.AddLog("操控视频进度成功，视频播放完毕");
+                            }
+                            else
+                            {
+                                _logService.AddLog("操控视频进度失败，正常播放视频");
+                            }
                         }
-                        else
-                        {
-                            _logService.AddLog("操控视频进度失败，正常播放视频");
-                        }
+                        await video.WaitForVideoEnd();
+                        _logService.AddLog("播放完毕"); 
                     }
-                    await video.WaitForVideoEnd();
-                    
-                    _logService.AddLog("播放完毕"); 
                 }
             }
-        }
-        if (pr.HasTest && _settings.AutoTest) 
-        { 
-            var fp = Path.Combine(_settings.UserDataDir, "q.png"); 
-            foreach (var ct in pr.Tests) 
+            
+            
+            if (pr.HasTest && _settings.AutoTest) 
             { 
-                await ct.GetTitleAndQuestions(); 
-                _logService.AddLog($"搜索到章节测试 : {ct.ChapterTitle}"); 
-                if (ct.IsCompleted)
+                var fp = Path.Combine(_settings.UserDataDir, "q.png"); 
+                foreach (var ct in pr.Tests) 
                 { 
-                    _logService.AddLog($"该章节测试已完成"); 
-                } 
-                if (ct.HasQuestion && !ct.IsCompleted) 
-                { 
-                    foreach (var q in ct.Questions) 
+                    await ct.GetTitleAndQuestions(); 
+                    if (ct.IsCompleted)
                     { 
-                        await q.GetAnswers(); 
-                        if (_settings.UsedAiToOcr) 
+                        _logService.AddLog($"该章节测试已完成"); 
+                    } 
+                    if (ct.HasQuestion && !ct.IsCompleted) 
+                    { 
+                        foreach (var q in ct.Questions) 
                         { 
-                            var bytes = await q.GetImageForQuestion(); 
-                            await File.WriteAllBytesAsync(fp, bytes);
-                            var r = await _aiControlService.GetTextFromImage(fp);
-                            if (r==null)
-                            {
-                                _settings.AutoTest = false;
-                                _logService.AddLog("OCR识图异常，已自动关闭自动答题");
-                                goto nextchapter;
-                            }
-                            else
-                            {
+                            await q.GetAnswers(); 
+                            if (_settings.UsedAiToOcr) 
+                            { 
+                                var bytes = await q.GetImageForQuestion(); 
+                                await File.WriteAllBytesAsync(fp, bytes);
+                                var r = await _aiControlService.GetTextFromImage(fp);
+                                if (r==null)
+                                {
+                                    _settings.AutoTest = false;
+                                    _logService.AddLog("AIOCR识图异常，已自动关闭自动答题");
+                                    return;
+                                }
                                 _sbQuestion.Append(r); 
                             }
-                        }
-                        else 
-                        { 
-                            var bytes = await q.GetImageForQuestion(); 
-                            await File.WriteAllBytesAsync(fp, bytes); 
-                            var r =_ocrService.RunOCR(fp);
-                            if (r==null)
-                            {
-                                _settings.AutoTest = false;
-                                _logService.AddLog("OCR识图异常，已自动关闭自动答题");
-                                goto nextchapter;
-                            }
-                            else
-                            {
+                            else 
+                            { 
+                                var bytes = await q.GetImageForQuestion(); 
+                                await File.WriteAllBytesAsync(fp, bytes); 
+                                var r =_ocrService.RunOCR(fp);
+                                if (r==null)
+                                {
+                                    _settings.AutoTest = false;
+                                    _logService.AddLog("OCR识图异常，已关闭自动答题并结束刷课");
+                                    return;
+                                }
                                 _sbQuestion.Append(r); 
-                            }
                             /*
                             _sbQuestion.Append($"标题：{q.Title}\n"); 
                             foreach (var i in q.Answers) 
@@ -227,35 +233,40 @@ public class CoreService : ICoreService
                                 _sbQuestion.Append($"选项 {await i.Key.InnerTextAsync()} : {await i.Value.InnerTextAsync()}\n"); 
                             } 
                             */
-                        } 
-                        var ans = await _aiControlService.GetAnswer(_sbQuestion.ToString()); 
-                        if (ans == null) 
-                        { 
-                            _settings.AutoTest = false;
-                            _logService.AddLog("Ai配置异常！已关闭自动答题"); 
-                            goto nextchapter;
-                        } 
-                        foreach (var a in q.Answers) 
-                        { 
-                            if (ans.Contains(await a.Key.InnerTextAsync())) 
-                            { 
-                                await a.Key.ClickAsync(); 
                             } 
+                            var ans = await _aiControlService.GetAnswer(_sbQuestion.ToString()); 
+                            if (ans == null) 
+                            { 
+                                _settings.AutoTest = false;
+                                _logService.AddLog("Ai配置异常！已关闭自动答题");
+                                return;
+                            } 
+                            foreach (var a in q.Answers) 
+                            { 
+                                if (ans.Contains(await a.Key.InnerTextAsync())) 
+                                { 
+                                    await a.Key.ClickAsync(); 
+                                } 
+                            } 
+                            _sbQuestion.Clear(); 
+                            await Task.Delay(_settings.AiAnsweringInterval); 
                         } 
-                        _sbQuestion.Clear(); 
-                        await Task.Delay(_settings.AiAnsweringInterval); 
+                        await ct.SubmitAnswer();
+                        await pr.WaitForSubmitAgain();
+                        _logService.AddLog($"该章节测试提交成功"); 
+                        await Task.Delay(_settings.ChapterJumpInterval); 
                     } 
-                    await ct.SubmitAnswer();
-                    await pr.WaitForSubmitAgain();
-                    _logService.AddLog($"该章节测试提交成功"); 
-                    await Task.Delay(_settings.ChapterJumpInterval); 
                 } 
             } 
-        } 
-        nextchapter:
-        _logService.AddLog("进入下一节..."); 
-        await pr.NextPageAsync(); 
-        await Task.Delay(_settings.ChapterJumpInterval);
+            _logService.AddLog("进入下一节..."); 
+            await pr.NextPageAsync(); 
+            await Task.Delay(_settings.ChapterJumpInterval);
+        }
+        catch (Exception e)
+        {
+            Console.WriteLine(e);
+        }
+        
     }
     
     private string? GetDefaultBrowserPath()
@@ -313,6 +324,7 @@ public class CoreService : ICoreService
     public void Dispose()
     {
         _playwright.Dispose();
+        StopLoginHeartbeat();
     }
 
 

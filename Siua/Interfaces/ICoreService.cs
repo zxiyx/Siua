@@ -9,4 +9,6 @@ public interface ICoreService
 
     public Task ParsePage();
 
+    public void StopLoginHeartbeat();
+    public void Dispose();
 }

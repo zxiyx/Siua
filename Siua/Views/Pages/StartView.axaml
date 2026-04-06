@@ -127,7 +127,7 @@
                     <icons:MaterialIcon DockPanel.Dock="Left"   Kind="Camera" Height="20" Width="20"
                                         Foreground="{DynamicResource SukiLowText}"/>
                     <StackPanel>
-                        <TextBlock Text="AI文字识别" FontSize="16" FontWeight="Bold"/>
+                        <TextBlock Text="AI识文字别" FontSize="16" FontWeight="Bold"/>
                         <TextBlock Text="调用模型进行文字识别，需配置可识别图像的模型" FontSize="16" Foreground="{DynamicResource SukiLowText}" />
                     </StackPanel>
                     <ToggleButton Classes="Switch" IsChecked="{Binding Settings.UsedAiToOcr}" DockPanel.Dock="Right" HorizontalAlignment="Right"/>
@@ -138,11 +138,11 @@
                     <icons:MaterialIcon DockPanel.Dock="Left"   Kind="RobotLove" Height="20" Width="20"
                                         Foreground="{DynamicResource SukiLowText}"/>
                     <StackPanel>
-                        <TextBlock Text="下载OCR模型" FontSize="16" FontWeight="Bold"/>
-                        <TextBlock Text="下载离线模型用于OCR文字识别" FontSize="16" Foreground="{DynamicResource SukiLowText}" />
+                        <TextBlock Text="加载OCR模型" FontSize="16" FontWeight="Bold"/>
+                        <TextBlock Text="下载/加载离线模型用于OCR文字识别" FontSize="16" Foreground="{DynamicResource SukiLowText}" />
                     </StackPanel>
                     <Button p:ButtonExtensions.Icon="{icons:MaterialIconExt Kind=Download}" p:ButtonExtensions.ShowProgress="{Binding IsDownloading}"
-                            Classes="Flat" DockPanel.Dock="Right" HorizontalAlignment="Right" Content="更新" Command="{Binding UpdateOCRModel}"/>
+                            Classes="Flat" DockPanel.Dock="Right" HorizontalAlignment="Right" Content="加载" Command="{Binding UpdateOCRModel}"/>
                 </DockPanel>
             </suki:GlassCard>
         </StackPanel>

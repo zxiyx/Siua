@@ -83,18 +83,10 @@
                         <icons:MaterialIcon DockPanel.Dock="Left"   Kind="RobotConfused" Height="20" 
                                             Foreground="{DynamicResource SukiLowText}"/>
                         <StackPanel >
-                            <TextBlock Text="AI模型" FontSize="16" FontWeight="Bold"/>
-                            <TextBlock Text="当前使用模型" FontSize="16" Foreground="{DynamicResource SukiLowText}" />
+                            <TextBlock Text="当前使用模型" FontSize="16" FontWeight="Bold"/>
+                            <TextBlock Text="设置的Ai模型名称" FontSize="16" Foreground="{DynamicResource SukiLowText}" />
                         </StackPanel>
-                        <ComboBox DockPanel.Dock="Right" Width="150" SelectedItem="{Binding Settings.Ais[0]}"
-                                  ItemsSource="{Binding Settings.Ais}" 
-                                  HorizontalAlignment="Right">
-                            <ComboBox.ItemTemplate>
-                                <DataTemplate>
-                                    <TextBlock Text="{Binding ModelName}"/>
-                                </DataTemplate>
-                            </ComboBox.ItemTemplate>
-                        </ComboBox>
+                        <TextBox DockPanel.Dock="Right" HorizontalAlignment="Right" Width="100"  IsReadOnly="True" Text="{Binding Settings.CurrentAi.ModelName}" TextAlignment="Center"/>
                     </DockPanel>
                     </suki:GroupBox>
             </suki:GlassCard>

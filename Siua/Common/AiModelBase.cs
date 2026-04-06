@@ -2,7 +2,7 @@
 
 public class AiModelBase
 {
-    public string Host { get; set; }
-    public string ModelName { get; set; }
-    public string ApiKey { get; set; }
+    public string? Domain { get; set; }
+    public string? ModelName { get; set; }
+    public string? ApiKey { get; set; }
 }

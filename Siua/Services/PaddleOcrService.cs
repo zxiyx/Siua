@@ -47,11 +47,12 @@ public class PaddleOcrService
             using (Mat src = Cv2.ImRead(imagePath))
             {
                 PaddleOcrResult result = _all.Run(src);
-                return result.Text;
+                return result.Text.Trim();
             }
         }
         catch (Exception e)
         {
+            Console.WriteLine("离线模型报错{0}",e);
             return null;
         }
     }

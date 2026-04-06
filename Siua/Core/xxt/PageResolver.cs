@@ -8,15 +8,9 @@ namespace Siua.Core;
 public class PageResolver
 {
     private IPage page;
-    private IFrame mFrame;
-    public bool HasVideo
-    {
-        get => Videos.Count >= 1;
-    }
-    public bool HasTest
-    {
-        get => Tests.Count >= 1;
-    }
+    private IFrame? mFrame;
+    public bool HasVideo=> Videos.Count > 0;
+    public bool HasTest => Tests.Count > 0;
     private List<Video> videos = new();
     private List<ChapterTest> tests = new();
     
@@ -28,69 +22,78 @@ public class PageResolver
         page = opage;
         _settings = settings;
     }
-    public async Task WaitLoading()
+    public async Task<bool> WaitLoading()
     {
         try
         {
-            await page.WaitForSelectorAsync("div.course_main > iframe");
             await GetMainFrame();
-
+            return true;
         }
         catch (Exception e)
         {
             Console.WriteLine("[Error]WaitLoading :{0}", e);
+            return false;
         }
     }
 
     private async Task GetMainFrame()
     {
-        try
+        var felement = page.Locator("div.course_main > iframe").First;
+        await felement.WaitForAsync();
+
+        var frameHandle = await felement.ElementHandleAsync();
+        if (frameHandle == null)
         {
-            var felement = await page.QuerySelectorAsync("div.course_main > iframe");
-            mFrame = await felement.ContentFrameAsync();
+            Console.WriteLine("[Error]找不到course_main 中 mframe");
+            mFrame = null;
+            return;
         }
-        catch (Exception e)
-        {
-            Console.WriteLine("[Error]GetMFrame :{0}", e);
-        }
-        
+        mFrame = await frameHandle.ContentFrameAsync();
+        if (mFrame == null) Console.WriteLine("[Error]mframe缺失");
     }
     public async Task ResolvePage()
     {
-        var fContainers = await mFrame.QuerySelectorAllAsync("p > div.videoContainer");
-        if (fContainers.Count >= 1)
+        if (mFrame == null)
         {
-            foreach (var container in fContainers)
-            {
-                videos.Add(new Video(container,_settings));
-            }
+            Console.WriteLine("[Error]mframe未加载");
+            return;
         }
-        fContainers = null;
-        fContainers = await mFrame.QuerySelectorAllAsync("p > div.ans-attach-ct:not(.videoContainer)");
-        if (fContainers.Count >= 1)
+        var videoContainers = mFrame.Locator("p > div.videoContainer");
+        var videoCount = await videoContainers.CountAsync();
+        for (int i = 0; i < videoCount; i++)
         {
-            //Console.WriteLine($"获取test {fContainers.Count} 个");
-            foreach (var container in fContainers)
-            {
-                tests.Add(new ChapterTest(container));
-            }
+            videos.Add(new Video(videoContainers.Nth(i), _settings));
+        }
+
+        var testContainers = mFrame.Locator("p > div.ans-attach-ct:not(.videoContainer)");
+        var testCount = await testContainers.CountAsync();
+        for (int i = 0; i < testCount; i++)
+        {
+            tests.Add(new ChapterTest(testContainers.Nth(i)));
         }
     }
     public async Task WaitForSubmitAgain()
     {
-        var popup = await page.QuerySelectorAllAsync("div.maskDiv > div.popDiv.wid440.Marking");
-        if (popup.Count > 0 && await popup[0].IsVisibleAsync()) 
+        var popup = page.Locator("div.maskDiv > div.popDiv.wid440.Marking").First;
+        await popup.WaitForAsync(new ()
         {
-            var submit = await popup[0].QuerySelectorAsync("#popok");
-            await submit.ClickAsync();
+            State = WaitForSelectorState.Visible,
+            Timeout = 1500
+        });
+        if (await popup.CountAsync() > 0)
+        {
+            var submit = popup.First.Locator("#popok");
+            if (await submit.CountAsync() > 0)
+            {
+                await submit.First.ClickAsync();
+            }
         }
-        
     }
     public async Task NextPageAsync()
     {
-        await page.WaitForSelectorAsync("#prevNextFocus > #prevNextFocusNext");
-        var buttonToNext = await page.QuerySelectorAsync("#prevNextFocusNext");
-        await buttonToNext.ClickAsync();
+        var next = page.Locator("#prevNextFocus > #prevNextFocusNext").First;
+        await next.WaitForAsync();
+        await next.ClickAsync();
         await page.WaitForLoadStateAsync(LoadState.Load);
         await WaitForCloseNotice();
     }
@@ -98,24 +101,24 @@ public class PageResolver
     {
         try
         {
-            var popup = await page.QuerySelectorAllAsync("div.popHead > #popHeadFocus");
-            //var popup = await page.QuerySelectorAllAsync("div.maskDiv.jobFinishTip.maskFadeOut > div.popDiv.wid440.popMove > #jobFinishTipFocus");
-            if (popup != null)
+            var popup = page.Locator("div.popHead > #popHeadFocus");
+            await popup.WaitForAsync(new()
+            {      
+                State = WaitForSelectorState.Visible,
+                Timeout = 1500
+            });
+            if (await popup.CountAsync() > 0)
             {
-                var nextbut = await page.QuerySelectorAllAsync("div.popBottom > a.jb_btn.nextChapter");
-                if (nextbut.Count>0 &&  await nextbut[0].IsVisibleAsync())
+                var nextbut = page.Locator("div.popBottom > a.jb_btn.nextChapter");
+                if (await nextbut.CountAsync() > 0 && await nextbut.First.IsVisibleAsync())
                 {
-                    await nextbut[0].ClickAsync();
+                    await nextbut.First.ClickAsync();
                 }
             }
         }
-        catch (Exception e)
+        catch
         {
-            Console.WriteLine("未找到");
+            Console.WriteLine("未找到Pop");
         }
-        
     }
-
-    
 }
-

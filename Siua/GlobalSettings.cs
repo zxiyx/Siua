@@ -17,7 +17,7 @@ public partial class GlobalSettings:ObservableObject
     [ObservableProperty]
     private bool _jumpCompleted  = true;
     [ObservableProperty]
-    private int _chapterJumpInterval  = 1000;
+    private int _chapterJumpInterval  = 2000;
     [ObservableProperty]
     private int _aiAnsweringInterval  = 2000;
     [ObservableProperty]
@@ -36,7 +36,7 @@ public partial class GlobalSettings:ObservableObject
     
     [ObservableProperty]
     private bool _saveCookies  = true;
-    
+
     [ObservableProperty]
     [JsonIgnore]
     private string _userDataDir = Path.Combine(Directory.GetCurrentDirectory(), "UserData");
@@ -45,7 +45,12 @@ public partial class GlobalSettings:ObservableObject
     private ObservableCollection<string> _courses  = new ();
     
     [ObservableProperty]
-    private ObservableCollection<AiModelBase> _ais = new();
+    private AiModelBase _currentAi = new()
+    {
+        ApiKey = null,
+        Domain = null,
+        ModelName = null
+    };
     
     [JsonIgnore]
     private string JsonPath  => Path.Combine(Directory.GetCurrentDirectory(), "settings.json");
@@ -59,11 +64,10 @@ public partial class GlobalSettings:ObservableObject
         _saveTimer.Elapsed += async(s, e) => await SaveToJson();
         this.PropertyChanged += OnPropertyChanged;
         _courses.CollectionChanged += OnCollectionChanged;
-        _ais.CollectionChanged += OnCollectionChanged;
     }
     private void OnPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName is nameof(Courses) or nameof(Ais) or nameof(JsonPath))
+        if (e.PropertyName is nameof(Courses) or nameof(CurrentAi) or nameof(JsonPath))
             return;
         if (!_isInitialized || IsLoading) return;
         TriggerAutoSave();

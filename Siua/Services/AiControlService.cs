@@ -17,10 +17,10 @@ public class AiControlService
     public AiControlService(GlobalSettings  globalSettings)
     {
         _globalSettings = globalSettings;
-        if (_globalSettings.Ais.Count > 0)
+        if (_globalSettings.CurrentAi.Domain!=null) 
         {
-            _auth = new OpenAIAuthentication(_globalSettings.Ais[0].ApiKey);
-            _settings = new OpenAISettings(_globalSettings.Ais[0].Host); 
+            _auth = new OpenAIAuthentication(_globalSettings.CurrentAi.ApiKey);
+            _settings = new OpenAISettings(_globalSettings.CurrentAi.Domain); 
             _client = new OpenAIClient(_auth, _settings);
             _hasAi = true;
         }
@@ -33,10 +33,10 @@ public class AiControlService
         {
             var messages = new List<Message>
             {
-                new Message(Role.System,"你是一个专业答题助手无论是单选题还是多选题，只告诉我答案即可，比如ABC、A等"),
-                new Message(Role.User, m)
+                new (Role.System,"你是一个专业答题助手,无论是单选题还是多选题只告诉我答案即可，比如ABC、A等,不要解释"),
+                new (Role.User, m)
             };
-            var chatRequest = new ChatRequest(messages, _globalSettings.Ais[0].ModelName, 0.3);
+            var chatRequest = new ChatRequest(messages, _globalSettings.CurrentAi.ModelName, temperature:0.1,frequencyPenalty:0);
             var response = await _client.ChatEndpoint.GetCompletionAsync(chatRequest);
             return response.FirstChoice.Message.Content.ToString();
         }
@@ -62,7 +62,8 @@ public class AiControlService
                 new Message(Role.System, "你是一个专业的 OCR 文字识别助手"),
                 new Message(Role.User, contentParts)
             };
-            var chatRequest = new ChatRequest(messages, _globalSettings.Ais[0].ModelName, 0.3);
+            var chatRequest = new ChatRequest(messages, _globalSettings.CurrentAi.ModelName,
+                0.3);
             var response = await _client.ChatEndpoint.GetCompletionAsync(chatRequest);
             return response.FirstChoice.Message.Content.ToString();
         }

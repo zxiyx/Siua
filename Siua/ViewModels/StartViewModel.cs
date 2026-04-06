@@ -28,11 +28,11 @@ public partial class StartViewModel :PageBase
     [RelayCommand]
     public async Task StartRunning()
     {
-        
         _mainLoopRunning = !_mainLoopRunning;
         if (IsRunning)
         {
             IsRunning = !IsRunning;
+            _coreService.Dispose();
             return;
         }
         IsRunning = true;
@@ -45,6 +45,7 @@ public partial class StartViewModel :PageBase
         {
             await _coreService.ParsePage();
         }
+        _coreService.StopLoginHeartbeat();
         IsRunning = false;
     }
     [RelayCommand]
