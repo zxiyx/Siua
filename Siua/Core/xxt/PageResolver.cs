@@ -13,7 +13,6 @@ public class PageResolver
     public bool HasTest => Tests.Count > 0;
     private List<Video> videos = new();
     private List<ChapterTest> tests = new();
-    
     public List<Video> Videos => videos;
     public List<ChapterTest> Tests => tests;
     private readonly GlobalSettings _settings;
@@ -78,7 +77,7 @@ public class PageResolver
         await popup.WaitForAsync(new ()
         {
             State = WaitForSelectorState.Visible,
-            Timeout = 1500
+            Timeout = _settings.PopupTimeout
         });
         if (await popup.CountAsync() > 0)
         {
@@ -94,7 +93,7 @@ public class PageResolver
         var next = page.Locator("#prevNextFocus > #prevNextFocusNext").First;
         await next.WaitForAsync();
         await next.ClickAsync();
-        await page.WaitForLoadStateAsync(LoadState.Load);
+        await page.WaitForLoadStateAsync(LoadState.DOMContentLoaded);
         await WaitForCloseNotice();
     }
     private async Task WaitForCloseNotice()
@@ -105,7 +104,7 @@ public class PageResolver
             await popup.WaitForAsync(new()
             {      
                 State = WaitForSelectorState.Visible,
-                Timeout = 1500
+                Timeout = _settings.PopupTimeout
             });
             if (await popup.CountAsync() > 0)
             {

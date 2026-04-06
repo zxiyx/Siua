@@ -18,7 +18,6 @@ public partial class StartViewModel :PageBase
     private GlobalSettings _settings;
     private readonly ICoreService _coreService;
     private readonly PaddleOcrService _paddleOcrService;
-
     public StartViewModel(GlobalSettings globalSettings,ICoreService coreService,PaddleOcrService paddleOcrService) : base("开始", MaterialIconKind.Application, 0)
     {
         _settings = globalSettings;
@@ -37,10 +36,6 @@ public partial class StartViewModel :PageBase
         }
         IsRunning = true;
         await _coreService.LoadPlaywright();
-        if (Settings.SaveCookies)
-        {
-            
-        }
         while (_mainLoopRunning)
         {
             await _coreService.ParsePage();

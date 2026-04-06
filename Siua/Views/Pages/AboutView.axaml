@@ -11,7 +11,7 @@
     <suki:GlassCard Margin="150">
         <StackPanel Margin="30" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="20">
             <Image Source="../../Assets/siua.ico" Width="80" Height="80"/>
-            <TextBlock Text="Siua v1.0.0" FontSize="20" FontWeight="Bold" HorizontalAlignment="Center"/>
+            <TextBlock Text="Siua v1.0.2" FontSize="20" FontWeight="Bold" HorizontalAlignment="Center"/>
             <TextBlock Text="基于PlayWright的自动化学习工具" FontSize="16"  HorizontalAlignment="Center" Foreground="{DynamicResource SukiLowText}" MaxWidth="400"/>
             <Button  Classes="Basic" HorizontalAlignment="Center" Foreground="Black" ToolTip.Tip="作者">
                 <StackPanel Orientation="Horizontal" Spacing="5">

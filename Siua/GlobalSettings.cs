@@ -24,6 +24,9 @@ public partial class GlobalSettings:ObservableObject
     private bool _tryFinishVideo  = false;
     [ObservableProperty]
     private bool _isMuted  = true;
+
+    [ObservableProperty] 
+    private int _popupTimeout = 1500;
     
     [ObservableProperty]
     private double _videoPlayRate  = 1.0;
@@ -33,10 +36,6 @@ public partial class GlobalSettings:ObservableObject
     
     [ObservableProperty]
     private bool _autoTest = false;
-    
-    [ObservableProperty]
-    private bool _saveCookies  = true;
-
     [ObservableProperty]
     [JsonIgnore]
     private string _userDataDir = Path.Combine(Directory.GetCurrentDirectory(), "UserData");

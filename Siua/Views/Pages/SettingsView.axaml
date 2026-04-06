@@ -35,28 +35,6 @@
                     </DockPanel>
                     </suki:GroupBox>
             </suki:GlassCard>
-            <suki:GlassCard CornerRadius="0,0,0,0">
-                <DockPanel HorizontalSpacing="10">
-                    <icons:MaterialIcon DockPanel.Dock="Left"   Kind="Cookie" Height="20" Width="20"
-                                        Foreground="{DynamicResource SukiLowText}"/>
-                    <StackPanel>
-                        <TextBlock Text="保存Cookie" FontSize="16" FontWeight="Bold"/>
-                        <TextBlock Text="下次使用浏览器不需要登录账号" FontSize="16" Foreground="{DynamicResource SukiLowText}" />
-                    </StackPanel>
-                    <ToggleButton Classes="Switch" DockPanel.Dock="Right" HorizontalAlignment="Right" IsChecked="{Binding Settings.SaveCookies}"/>
-                </DockPanel>
-            </suki:GlassCard>
-            <suki:GlassCard CornerRadius="0,0,0,0">
-                <DockPanel HorizontalSpacing="10">
-                    <icons:MaterialIcon DockPanel.Dock="Left"   Kind="FolderText" Height="20" Width="20"
-                                        Foreground="{DynamicResource SukiLowText}"/>
-                    <StackPanel>
-                        <TextBlock Text="用户数据目录" FontSize="16" FontWeight="Bold"/>
-                        <TextBlock Text="包括浏览器数据和Cookie等" FontSize="16" Foreground="{DynamicResource SukiLowText}" />
-                    </StackPanel>
-                    <Button p:ButtonExtensions.Icon="{icons:MaterialIconExt Kind=FolderAdd}" Classes="Flat" DockPanel.Dock="Right" HorizontalAlignment="Right" Content="更改用户数据目录"/>
-                </DockPanel>
-            </suki:GlassCard>
             <suki:GlassCard CornerRadius="0,0,25,25">
                 <DockPanel HorizontalSpacing="10">
                     <icons:MaterialIcon DockPanel.Dock="Left"   Kind="BookOpenVariant" Height="20" Width="20"

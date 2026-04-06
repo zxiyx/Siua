@@ -46,13 +46,24 @@
                     <ToggleButton Classes="Switch" DockPanel.Dock="Right" IsChecked="{Binding Settings.JumpCompleted}" HorizontalAlignment="Right"/>
                 </DockPanel>
             </suki:GlassCard>
+            <suki:GlassCard CornerRadius="0,0,0,0">
+                <DockPanel HorizontalSpacing="10">
+                    <icons:MaterialIcon DockPanel.Dock="Left"   Kind="TimerAlert" Height="20" Width="20"
+                                        Foreground="{DynamicResource SukiLowText}"/>
+                    <StackPanel>
+                        <TextBlock Text="Popup等待时长" FontSize="16" FontWeight="Bold"/>
+                        <TextBlock Text="等待并关闭弹出的提示窗口的时间（单位/ms）" FontSize="16" Foreground="{DynamicResource SukiLowText}" />
+                    </StackPanel>
+                    <TextBox DockPanel.Dock="Right" HorizontalAlignment="Right" Width="100" Text="{Binding Settings.PopupTimeout}" TextAlignment="Center"/>
+                </DockPanel>
+            </suki:GlassCard>
             <suki:GlassCard CornerRadius="0,0,25,25">
                 <DockPanel HorizontalSpacing="10">
                     <icons:MaterialIcon DockPanel.Dock="Left"   Kind="Timer" Height="20" Width="20"
                                         Foreground="{DynamicResource SukiLowText}"/>
                     <StackPanel>
-                        <TextBlock Text="跳转间隔" FontSize="16" FontWeight="Bold"/>
-                        <TextBlock Text="跳转章节的缓存时间(单位ms)" FontSize="16" Foreground="{DynamicResource SukiLowText}" />
+                        <TextBlock Text="章节跳转间隔" FontSize="16" FontWeight="Bold"/>
+                        <TextBlock Text="跳转章节的等待时间(单位ms)" FontSize="16" Foreground="{DynamicResource SukiLowText}" />
                     </StackPanel>
                     <TextBox DockPanel.Dock="Right" HorizontalAlignment="Right" Width="100" Text="{Binding Settings.ChapterJumpInterval}" TextAlignment="Center"/>
                 </DockPanel>
