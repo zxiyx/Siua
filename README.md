@@ -1,6 +1,6 @@
 # Siua 🎓
 
-> 基于 Playwright + MVVM的自动化刷课/答题软件
+> 基于 Playwright + Avalonia的自动化刷课/答题软件
 
 ![C#](https://img.shields.io/badge/C%23-.NET%208-512BD4?style=flat-square&logo=dotnet)
 ![C#](https://img.shields.io/badge/C%23-.NET%208-512BD4?style=flat-square&logo=dotnet)
@@ -20,9 +20,10 @@
 - 可配置的等待时间与操作策略
 ### 🧠 AI 智能答题
 - 支持配置多个 AI 模型接入（OpenAI / Kimi / 自定义接口）
-- 支持下载离线OCR模型用于文字识别
+- 支持下载离线OCR模型用于题目文字识别
 - 自动提取题目文本，调用大模型生成答案
 - 暂仅支持单选题/多选题
+- 数学题需要自行配置可识别图片的AI模型
 
 ### 📅 计划中
 - [ ] 适配知到智慧树
