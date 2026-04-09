@@ -2,26 +2,45 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        mc:Ignorable="d" d:DesignWidth="400" d:DesignHeight="350"
-        Width="400" Height="350"
+        mc:Ignorable="d" d:DesignWidth="500" d:DesignHeight="520"
+        Width="500" Height="520"
         xmlns:vm="using:Siua.ViewModels"
         xmlns:suki="https://github.com/kikipoulet/SukiUI"
         xmlns:icons="clr-namespace:Material.Icons.Avalonia;assembly=Material.Icons.Avalonia"
         x:Class="Siua.Views.Windows.AiSettingsView"
         x:DataType="vm:AiSettingsViewModel"
         Title="设置AI">
-    <Grid Margin="20">
-        <suki:GlassCard Width="300" Margin="0,10,0,35">
+    <suki:SukiWindow.Resources>
+        <vm:ProviderToBoolConverter x:Key="ProviderToBool"/>
+    </suki:SukiWindow.Resources>
+    <Grid Margin="20" RowDefinitions="*,*,4*">
+        <StackPanel Orientation="Horizontal" Spacing="10">
+            <RadioButton Height="60" Classes="GigaChips" Content="DeepSeek" GroupName="R2"
+                         IsChecked="{Binding SelectedProvider, Converter={StaticResource ProviderToBool}, ConverterParameter=DeepSeek}"/>
+            <RadioButton Height="60" Classes="GigaChips" Content="阿里Qwen" GroupName="R2"
+                         IsChecked="{Binding SelectedProvider, Converter={StaticResource ProviderToBool}, ConverterParameter=阿里Qwen}"/>
+            <RadioButton Height="60" Classes="GigaChips" Content="Kimi" GroupName="R2"
+                         IsChecked="{Binding SelectedProvider, Converter={StaticResource ProviderToBool}, ConverterParameter=Kimi}"/>
+            <RadioButton Height="60" Classes="GigaChips" Content="腾讯混元" GroupName="R2"
+                         IsChecked="{Binding SelectedProvider, Converter={StaticResource ProviderToBool}, ConverterParameter=腾讯混元}"/>
+        </StackPanel>
+        <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="10">
+            <RadioButton Height="60" Classes="GigaChips" Content="豆包" GroupName="R2"
+                         IsChecked="{Binding SelectedProvider, Converter={StaticResource ProviderToBool}, ConverterParameter=豆包}"/>
+            <RadioButton Height="60" Classes="GigaChips" Content="自定义" GroupName="R2" 
+                         IsChecked="{Binding SelectedProvider, Converter={StaticResource ProviderToBool}, ConverterParameter=自定义}"/>
+        </StackPanel>
+        <suki:GlassCard Grid.Row="2"  Width="300" Margin="0,10,0,35">
             <suki:BusyArea IsBusy="{Binding IsAdding}">
-                <StackPanel >
+                <StackPanel>
                     <TextBlock Margin="6,0,0,3"
-                                       FontWeight="DemiBold" 
-                                       Foreground="{DynamicResource SukiLowText}"
-                                       Text="主机地址" />
+                               FontWeight="DemiBold"  IsVisible="{Binding IsCustom}"
+                               Foreground="{DynamicResource SukiLowText}"
+                               Text="主机地址" />
                             <TextBox suki:TextBoxExtensions.Prefix="{icons:MaterialIconExt Kind=Cloud}"
-                                     Classes="clearButton"
+                                     Classes="clearButton" IsVisible="{Binding IsCustom}"
                                      Text="{Binding Settings.CurrentAi.Domain}"
-                                     Watermark="input host" />
+                                     Watermark="input domain" />
                     <TextBlock Margin="6,10,0,3"
                                FontWeight="DemiBold" 
                                Foreground="{DynamicResource SukiLowText}"

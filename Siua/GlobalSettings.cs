@@ -48,7 +48,8 @@ public partial class GlobalSettings:ObservableObject
     {
         ApiKey = null,
         Domain = null,
-        ModelName = null
+        ModelName = null,
+        AiProvider = null,
     };
     
     [JsonIgnore]

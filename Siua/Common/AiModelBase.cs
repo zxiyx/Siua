@@ -1,8 +1,14 @@
-﻿namespace Siua.Common;
+﻿using CommunityToolkit.Mvvm.ComponentModel;
 
-public class AiModelBase
+namespace Siua.Common;
+
+public partial class AiModelBase:ObservableObject
 {
-    public string? Domain { get; set; }
-    public string? ModelName { get; set; }
-    public string? ApiKey { get; set; }
+    [ObservableProperty] private string? _aiProvider;
+
+    [ObservableProperty] private string? _domain;
+
+    [ObservableProperty] private string? _modelName;
+
+    [ObservableProperty] private string? _apiKey;
 }
