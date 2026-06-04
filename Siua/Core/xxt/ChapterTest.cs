@@ -11,7 +11,6 @@ public class ChapterTest
     private string chapterTitle;
     private string score;
     private bool isCompleted = false;
-    public string ChapterTitle => chapterTitle;
     private ILocator? ceyanDiv;
     private ILocator handle;
     private ILocator? form;
@@ -32,14 +31,6 @@ public class ChapterTest
     {
         handle = data;
     }
-
-    public async Task WaitFotGetTotalScore()
-    {
-        var sc = ceyanDiv!.Locator("div.DividerBox > div.dividerCon");
-        await sc.WaitForAsync();
-        score = await sc.InnerTextAsync();
-    }
-
     public async Task SubmitAnswer()
     {
         var submitcontainer = ceyanDiv!.Locator("div.ZY_sub.clearfix");
@@ -123,8 +114,9 @@ public class Question
         {
             var options = new LocatorScreenshotOptions()
             {
+                Animations = ScreenshotAnimations.Disabled,
                 Type = ScreenshotType.Png,
-                Timeout = 3000
+                Timeout = 5000
             };
             return await handle.ScreenshotAsync(options);
         }

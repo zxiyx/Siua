@@ -30,7 +30,7 @@
             <StackPanel>
                 <Image Classes="AppIcon" Source="../Assets/siua.ico"
                        Width="80" Height="80" Margin="30,10,30,0"/>
-                <Label HorizontalAlignment="Center" Content="Siua v1.0.0" FontSize="16" Foreground="{DynamicResource SukiLowText}" FontWeight="Bold" Margin="0,0,0,20"/>
+                <Label HorizontalAlignment="Center" Content="Siua v1.0.7" FontSize="16" Foreground="{DynamicResource SukiLowText}" FontWeight="Bold" Margin="0,0,0,20"/>
             </StackPanel>
         </suki:SukiSideMenu.HeaderContent>
         <suki:SukiSideMenu.FooterContent>

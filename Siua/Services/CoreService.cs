@@ -184,8 +184,18 @@ public class CoreService : ICoreService
                     }
                 }
             }
-            
-            
+            if (pr.HasPpt)
+            {
+                foreach (var p in pr.Ppts)
+                {
+                    if (!await p.IsCompleted())
+                    {
+                        _logService.AddLog("完成文档中..."); 
+                        await p.ScrollToEnd();
+                        _logService.AddLog("成功"); 
+                    }
+                }
+            }
             if (pr.HasTest && _settings.AutoTest) 
             { 
                 var fp = Path.Combine(_settings.UserDataDir, "q.png"); 
@@ -257,6 +267,7 @@ public class CoreService : ICoreService
                         await Task.Delay(_settings.ChapterJumpInterval); 
                     } 
                 } 
+                File.Delete(fp);
             } 
             _logService.AddLog("进入下一节..."); 
             await pr.NextPageAsync(); 

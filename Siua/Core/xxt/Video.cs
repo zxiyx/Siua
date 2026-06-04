@@ -48,7 +48,10 @@ public class Video
    
     public async Task Play()
     {
-        await videoElement.EvaluateAsync($@"
+        await videoElement.WaitForAsync();
+        if (videoElement!=null)
+        {
+            await videoElement.EvaluateAsync($@"
     (function() {{
         window._videoCompleted = false;
         const VIDEO_PAUSED_CLASS = 'vjs-paused';
@@ -112,6 +115,7 @@ public class Video
         }}
     }})();
     ");
+        }
     }
 
     public async Task<bool> TryFinishVideo()

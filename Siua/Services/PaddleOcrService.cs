@@ -14,6 +14,7 @@ public class PaddleOcrService
     private FullOcrModel _model;
     private PaddleOcrAll _all;
     private readonly ILogService _logService;
+    public string? ErrorMessage;
     public PaddleOcrService(ILogService logService)
     {
         _logService = logService;
@@ -52,6 +53,7 @@ public class PaddleOcrService
         }
         catch (Exception e)
         {
+            ErrorMessage = e.Message;
             Console.WriteLine("离线模型报错{0}",e);
             return null;
         }
