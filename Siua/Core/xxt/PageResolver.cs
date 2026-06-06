@@ -11,12 +11,12 @@ public class PageResolver
     private IFrame? mFrame;
     public bool HasVideo=> Videos.Count > 0;
     public bool HasTest => Tests.Count > 0;
-    public bool HasPpt => Ppts.Count > 0;
+    public bool HasDoc => Docs.Count > 0;
     private List<Video> videos = new();
     private List<ChapterTest> tests = new();
-    private List<Ppt> ppts = new();
+    private List<Doc> docs = new();
     public List<Video> Videos => videos;
-    public List<Ppt> Ppts => ppts;
+    public List<Doc> Docs => docs;
     public List<ChapterTest> Tests => tests;
     private readonly GlobalSettings _settings;
     public PageResolver(IPage opage ,GlobalSettings settings)
@@ -66,16 +66,17 @@ public class PageResolver
         {
             videos.Add(new Video(videoContainers.Nth(i), _settings));
         }
-        var testContainers = mFrame.Locator("p > div.ans-attach-ct:not(.videoContainer)");
-        var testCount = await testContainers.CountAsync();
-        for (int i = 0; i < testCount; i++)
+        var confContainers = mFrame.Locator("p > div.ans-attach-ct:not(.videoContainer)");
+        var Count = await confContainers.CountAsync();
+        for (int i = 0; i < Count; i++)
         {
-            var resolverResult = await PptResolver.ResloveToPpt(testContainers.Nth(i));
-            if (resolverResult == null) 
+            var dresolver = new DocResolver(confContainers.Nth(i));
+            var isDoc = await dresolver.ResloveToDoc();
+            if (isDoc)
             {
-                tests.Add(new ChapterTest(testContainers.Nth(i)));
+                docs.Add(new Doc(dresolver.Dframe, await dresolver.IsCompleted()));
             }
-            else ppts.Add(resolverResult);
+            else  tests.Add(new ChapterTest(confContainers.Nth(i)));;
         }
         
     }

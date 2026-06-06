@@ -60,14 +60,15 @@ public partial class GlobalSettings:ObservableObject
     [JsonIgnore] private bool _isInitialized = false;
     public GlobalSettings()
     {
-        _saveTimer = new System.Timers.Timer(1200) { AutoReset = false };
+        _saveTimer = new System.Timers.Timer(1000) { AutoReset = false };
         _saveTimer.Elapsed += async(s, e) => await SaveToJson();
         this.PropertyChanged += OnPropertyChanged;
         _courses.CollectionChanged += OnCollectionChanged;
+        _currentAi.PropertyChanged += OnPropertyChanged;
     }
     private void OnPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName is nameof(Courses) or nameof(CurrentAi) or nameof(JsonPath))
+        if (e.PropertyName is nameof(Courses) or nameof(JsonPath))
             return;
         if (!_isInitialized || IsLoading) return;
         TriggerAutoSave();

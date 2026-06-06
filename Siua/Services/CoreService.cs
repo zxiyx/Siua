@@ -184,15 +184,16 @@ public class CoreService : ICoreService
                     }
                 }
             }
-            if (pr.HasPpt)
+            if (pr.HasDoc)
             {
-                foreach (var p in pr.Ppts)
+                _logService.AddLog("检测到文档..."); 
+                foreach (var p in pr.Docs)
                 {
-                    if (!await p.IsCompleted())
+                    if (p.IcCompleted)
                     {
-                        _logService.AddLog("完成文档中..."); 
+                        _logService.AddLog("完成文档中...");
                         await p.ScrollToEnd();
-                        _logService.AddLog("成功"); 
+                        _logService.AddLog("完成文档"); 
                     }
                 }
             }
