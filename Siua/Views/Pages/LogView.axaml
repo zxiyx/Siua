@@ -6,8 +6,13 @@
              mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
              xmlns:suki="clr-namespace:SukiUI.Controls;assembly=SukiUI"
              xmlns:icons="clr-namespace:Material.Icons.Avalonia;assembly=Material.Icons.Avalonia"
+             xmlns:theme="https://github.com/kikipoulet/SukiUI"
+             xmlns:common="clr-namespace:Siua.Common"
              x:DataType="vm:LogViewModel"
              x:Class="Siua.Views.Pages.LogView">
+    <UserControl.Resources>
+        <common:LogLevelToColorConverter x:Key="LevelToColor"/>
+    </UserControl.Resources>
     
     <suki:GlassCard Margin="20">
         <suki:GroupBox>
@@ -15,12 +20,47 @@
                 <StackPanel Spacing="10" Orientation="Horizontal" >
                     <icons:MaterialIcon Height="20" Width="20" Kind="Notebook" 
                                         Foreground="{DynamicResource SukiPrimaryColor}"/>
-                    <TextBlock Text="运行日志" FontSize="16" VerticalAlignment="Center" FontWeight="Bold" HorizontalAlignment="Stretch"/>
+                    <TextBlock Text="运行日志" FontSize="16" VerticalAlignment="Center" FontWeight="DemiBold" HorizontalAlignment="Stretch"/>
+                    <StackPanel Margin="300,0,0,0" Orientation="Horizontal" Spacing="20">
+                        <CheckBox Content="提示" IsChecked="{Binding ShowInfo}"/>
+                        <CheckBox Content="报错" IsChecked="{Binding ShowError}"/>
+                        <CheckBox Content="浏览器" IsChecked="{Binding ShowBrowser}"/>
+                    </StackPanel>
+                    
                 </StackPanel>
             </suki:GroupBox.Header>
-            <TextBox IsReadOnly="True"  Text="{Binding LogContent}" HorizontalAlignment="Stretch" Width="700"
-                     HorizontalContentAlignment="Left" VerticalContentAlignment="Top" VerticalAlignment="Stretch" TextWrapping="Wrap" BorderThickness="0"/>
-        </suki:GroupBox>
+            
+            <ListBox ItemsSource="{Binding Logs}" Background="Transparent" BorderThickness="0"
+                     Padding="8,8,8,12"
+                     ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                <ListBox.ItemTemplate>
+                    <DataTemplate x:DataType="common:LogEntry">
+                        <Grid ColumnDefinitions="80,52,90,*" Margin="12,4">
+                            <TextBlock Text="{Binding Time, StringFormat=HH:mm:ss}"
+                                       Foreground="{DynamicResource SukiLowText}" FontWeight="DemiBold"
+                                       FontSize="12" VerticalAlignment="Top"/>
+                            <Border Grid.Column="1"  Background="{Binding Level, Converter={StaticResource LevelToColor}}"
+                                    CornerRadius="4" Padding="4,1" HorizontalAlignment="Left" VerticalAlignment="Top"
+                                    Margin="0,1,0,0">
+                                <TextBlock Text="{Binding LevelText}" FontSize="10" Foreground="White" FontWeight="DemiBold"/>
+                            </Border>
+                            <TextBlock Grid.Column="2" Text="{Binding Source}" FontWeight="DemiBold"
+                                       Foreground="{DynamicResource SukiLowText}" 
+                                       FontSize="11" VerticalAlignment="Top" Margin="8,0,0,0"/>
+                            <TextBlock Grid.Column="3" Text="{Binding Message}" TextWrapping="Wrap"
+                                       FontWeight="DemiBold" FontSize="12"
+                                       Foreground="{DynamicResource SukiText}"
+                                       VerticalAlignment="Top" Margin="8,0,0,0"/>
+                        </Grid>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+            
+            
+            
+            
+            
+            </suki:GroupBox>
     </suki:GlassCard>
     
     

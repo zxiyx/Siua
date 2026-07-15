@@ -69,7 +69,6 @@ public class CoreService : ICoreService
         {
             try
             {
-
                 _logService.AddLog($"[Browser] {e.Text}");
             }
             catch(Exception ex)
@@ -229,7 +228,7 @@ public class CoreService : ICoreService
                             { 
                                 var bytes = await q.GetImageForQuestion(); 
                                 await File.WriteAllBytesAsync(fp, bytes); 
-                                var r =_ocrService.RunOCR(fp);
+                                var r = await Task.Run(() => _ocrService.RunOCR(fp)); 
                                 if (r==null)
                                 {
                                     _settings.AutoTest = false;
