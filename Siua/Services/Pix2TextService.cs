@@ -1,7 +1,9 @@
 using System;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text.Json;
@@ -29,14 +31,21 @@ public sealed class Pix2TextService : IDisposable
         _logService = logService;
         _httpClient = new HttpClient
         {
-            BaseAddress = new Uri($"http://127.0.0.1:{settings.Pix2TextPort}/"),
             Timeout = TimeSpan.FromMinutes(2)
         };
+        _settings.PropertyChanged += OnSettingsPropertyChanged;
     }
 
     public async Task<bool> EnsureReadyAsync(CancellationToken cancellationToken = default)
     {
-        if (IsReady || await IsServiceReadyAsync(cancellationToken))
+        if (!TryGetEndpoint(out var listenAddress, out var serviceUri, out var endpointError))
+        {
+            ErrorMessage = endpointError;
+            _logService.AddLog(LogLevel.Error, "OCR", endpointError);
+            return false;
+        }
+
+        if (IsReady || await IsServiceReadyAsync(serviceUri, cancellationToken))
         {
             IsReady = true;
             return true;
@@ -45,7 +54,14 @@ public sealed class Pix2TextService : IDisposable
         await _startLock.WaitAsync(cancellationToken);
         try
         {
-            if (IsReady || await IsServiceReadyAsync(cancellationToken))
+            if (!TryGetEndpoint(out listenAddress, out serviceUri, out endpointError))
+            {
+                ErrorMessage = endpointError;
+                _logService.AddLog(LogLevel.Error, "OCR", endpointError);
+                return false;
+            }
+
+            if (IsReady || await IsServiceReadyAsync(serviceUri, cancellationToken))
             {
                 IsReady = true;
                 return true;
@@ -59,13 +75,12 @@ public sealed class Pix2TextService : IDisposable
                 return false;
             }
 
-            _logService.AddLog("正在启动 Pix2Text，本次首次加载模型可能需要较长时间...");
-            _process = new Process
+            _logService.AddLog($"正在启动 Pix2Text（{serviceUri.Authority}），首次加载模型可能需要较长时间...");
+            var process = new Process
             {
                 StartInfo = new ProcessStartInfo
                 {
                     FileName = executable,
-                    Arguments = $"serve -l en,ch_sim -H 127.0.0.1 -p {_settings.Pix2TextPort} -d cpu --disable-table",
                     WorkingDirectory = Path.GetDirectoryName(executable)!,
                     UseShellExecute = false,
                     CreateNoWindow = true,
@@ -74,27 +89,29 @@ public sealed class Pix2TextService : IDisposable
                 },
                 EnableRaisingEvents = true
             };
-            _process.OutputDataReceived += (_, e) =>
+            AddProcessArguments(process.StartInfo, listenAddress, _settings.Pix2TextPort);
+            process.OutputDataReceived += (_, e) =>
             {
                 if (!string.IsNullOrWhiteSpace(e.Data))
                     _logService.AddLog($"[Pix2Text] {e.Data}");
             };
-            _process.ErrorDataReceived += (_, e) =>
+            process.ErrorDataReceived += (_, e) =>
             {
                 if (!string.IsNullOrWhiteSpace(e.Data))
                     _logService.AddLog($"[Pix2Text] {e.Data}");
             };
-            _process.Start();
-            _process.BeginOutputReadLine();
-            _process.BeginErrorReadLine();
+            _process = process;
+            process.Start();
+            process.BeginOutputReadLine();
+            process.BeginErrorReadLine();
 
             for (var i = 0; i < 240; i++)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                if (_process.HasExited)
+                if (process.HasExited)
                     break;
 
-                if (await IsServiceReadyAsync(cancellationToken))
+                if (await IsServiceReadyAsync(serviceUri, cancellationToken))
                 {
                     IsReady = true;
                     ErrorMessage = null;
@@ -105,8 +122,8 @@ public sealed class Pix2TextService : IDisposable
                 await Task.Delay(500, cancellationToken);
             }
 
-            ErrorMessage = _process.HasExited
-                ? $"Pix2Text 启动失败，进程退出码：{_process.ExitCode}"
+            ErrorMessage = process.HasExited
+                ? $"Pix2Text 启动失败，进程退出码：{process.ExitCode}"
                 : "Pix2Text 模型加载超时";
             _logService.AddLog(ErrorMessage);
             return false;
@@ -143,7 +160,11 @@ public sealed class Pix2TextService : IDisposable
             image.Headers.ContentType = new MediaTypeHeaderValue(GetMediaType(imagePath));
             form.Add(image, "image", Path.GetFileName(imagePath));
 
-            using var response = await _httpClient.PostAsync("pix2text", form, cancellationToken);
+            if (!TryGetEndpoint(out _, out var serviceUri, out var endpointError))
+                throw new InvalidOperationException(endpointError);
+
+            using var response = await _httpClient.PostAsync(
+                new Uri(serviceUri, "pix2text"), form, cancellationToken);
             response.EnsureSuccessStatusCode();
             var json = await response.Content.ReadAsStringAsync(cancellationToken);
             return ExtractText(json);
@@ -169,13 +190,14 @@ public sealed class Pix2TextService : IDisposable
         return candidates.FirstOrDefault(File.Exists);
     }
 
-    private async Task<bool> IsServiceReadyAsync(CancellationToken cancellationToken)
+    private async Task<bool> IsServiceReadyAsync(Uri serviceUri, CancellationToken cancellationToken)
     {
         try
         {
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             timeout.CancelAfter(TimeSpan.FromSeconds(1));
-            using var response = await _httpClient.GetAsync("openapi.json", timeout.Token);
+            using var response = await _httpClient.GetAsync(
+                new Uri(serviceUri, "openapi.json"), timeout.Token);
             if (!response.IsSuccessStatusCode)
                 return false;
 
@@ -211,18 +233,66 @@ public sealed class Pix2TextService : IDisposable
             ? "image/jpeg"
             : "image/png";
 
-    public void Dispose()
+    private bool TryGetEndpoint(
+        out IPAddress listenAddress,
+        out Uri serviceUri,
+        out string errorMessage) =>
+        Pix2TextEndpoint.TryCreate(
+            _settings.Pix2TextHost,
+            _settings.Pix2TextPort,
+            out listenAddress,
+            out serviceUri,
+            out errorMessage);
+
+    private static void AddProcessArguments(
+        ProcessStartInfo startInfo,
+        IPAddress listenAddress,
+        int port)
     {
+        string[] arguments =
+        [
+            "serve", "-l", "en,ch_sim", "-H", listenAddress.ToString(),
+            "-p", port.ToString(), "-d", "cpu", "--disable-table"
+        ];
+        foreach (var argument in arguments)
+            startInfo.ArgumentList.Add(argument);
+    }
+
+    private void OnSettingsPropertyChanged(object? sender, PropertyChangedEventArgs eventArgs)
+    {
+        if (eventArgs.PropertyName is not (nameof(GlobalSettings.Pix2TextHost) or
+            nameof(GlobalSettings.Pix2TextPort)))
+            return;
+
+        IsReady = false;
+        ErrorMessage = null;
+        StopManagedProcess();
+    }
+
+    private void StopManagedProcess()
+    {
+        var process = Interlocked.Exchange(ref _process, null);
+        if (process is null)
+            return;
+
         try
         {
-            if (_process is { HasExited: false })
-                _process.Kill(entireProcessTree: true);
+            if (!process.HasExited)
+                process.Kill(entireProcessTree: true);
         }
         catch
         {
         }
+        finally
+        {
+            process.Dispose();
+        }
+    }
 
-        _process?.Dispose();
+    public void Dispose()
+    {
+        _settings.PropertyChanged -= OnSettingsPropertyChanged;
+        StopManagedProcess();
         _httpClient.Dispose();
         _startLock.Dispose();
     }

@@ -17,8 +17,10 @@
                 </Button>
                 <StackPanel Grid.Column="1" Spacing="3" VerticalAlignment="Center">
                     <TextBlock Text="课程地址管理" FontSize="27" FontWeight="SemiBold"/>
-                    <TextBlock Text="维护当前平台需要自动处理的课程链接"
-                               FontSize="14" Foreground="{DynamicResource SukiLowText}"/>
+                    <TextBlock FontSize="14" Foreground="{DynamicResource SukiLowText}">
+                        <Run Text="当前平台："/><Run Text="{Binding Settings.CurrentPlatform}"/>
+                        <Run Text=" · 每个平台的课程地址独立保存"/>
+                    </TextBlock>
                 </StackPanel>
             </Grid>
 
@@ -38,7 +40,7 @@
                                     Command="{Binding AddCourseCommand}"
                                     suki:ButtonExtensions.Icon="{icons:MaterialIconExt Kind=Add}"/>
                         </Grid>
-                        <TextBlock Text="重复或空白地址不会被添加" FontSize="12"
+                        <TextBlock Text="{Binding CourseValidationMessage}" FontSize="12"
                                    Foreground="{DynamicResource SukiLowText}"/>
                     </StackPanel>
                 </suki:BusyArea>

@@ -2,6 +2,7 @@
 using System.IO;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
+using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
 using System.Threading;
@@ -19,6 +20,8 @@ public partial class GlobalSettings : ObservableObject, IDisposable
 
     private readonly object _saveScheduleLock = new();
     private readonly SettingsStorage _storage;
+    private readonly Dictionary<string, ObservableCollection<string>> _coursesByPlatform =
+        new(StringComparer.Ordinal);
     private CancellationTokenSource? _saveDelayCts;
     private bool _isLoading;
     private bool _isInitialized;
@@ -26,6 +29,7 @@ public partial class GlobalSettings : ObservableObject, IDisposable
 
     [ObservableProperty] private string _currentPlatform = "学习通";
     [ObservableProperty] private string _pix2TextExecutablePath = Path.Combine("Pix2TextRuntime", "Scripts", "p2t.exe");
+    [ObservableProperty] private string _pix2TextHost = "127.0.0.1";
     [ObservableProperty] private int _pix2TextPort = 8503;
     [ObservableProperty] private string _browserCannel = "系统默认";
     [ObservableProperty] private bool _jumpCompleted = true;
@@ -53,6 +57,7 @@ public partial class GlobalSettings : ObservableObject, IDisposable
         _storage = new SettingsStorage(storageDirectory);
         UserDataDir = Path.Combine(_storage.StorageDirectory, "UserData");
         Directory.CreateDirectory(UserDataDir);
+        _coursesByPlatform[CurrentPlatform] = Courses;
 
         PropertyChanged += HandleSettingsChanged;
         Courses.CollectionChanged += HandleCollectionChanged;
@@ -78,7 +83,9 @@ public partial class GlobalSettings : ObservableObject, IDisposable
             _isInitialized = true;
         }
 
-        if (result.ShouldRewrite)
+        var requiresCourseMigration = result.Snapshot?.Courses is { Length: > 0 } &&
+                                      result.Snapshot.CoursesByPlatform is not { Count: > 0 };
+        if (result.ShouldRewrite || requiresCourseMigration)
         {
             SaveToJson().GetAwaiter().GetResult();
         }
@@ -116,12 +123,18 @@ public partial class GlobalSettings : ObservableObject, IDisposable
 
     partial void OnCoursesChanging(ObservableCollection<string> value)
     {
-        Courses.CollectionChanged -= HandleCollectionChanged;
+        value.CollectionChanged -= HandleCollectionChanged;
     }
 
     partial void OnCoursesChanged(ObservableCollection<string> value)
     {
+        _coursesByPlatform[CurrentPlatform] = value;
         value.CollectionChanged += HandleCollectionChanged;
+    }
+
+    partial void OnCurrentPlatformChanged(string value)
+    {
+        Courses = GetOrCreateCourses(value);
     }
 
     partial void OnCurrentAiChanging(AiModelBase value)
@@ -214,6 +227,7 @@ public partial class GlobalSettings : ObservableObject, IDisposable
     {
         CurrentPlatform = CurrentPlatform,
         Pix2TextExecutablePath = Pix2TextExecutablePath,
+        Pix2TextHost = Pix2TextHost,
         Pix2TextPort = Pix2TextPort,
         BrowserCannel = BrowserCannel,
         JumpCompleted = JumpCompleted,
@@ -225,7 +239,10 @@ public partial class GlobalSettings : ObservableObject, IDisposable
         VideoPlayRate = VideoPlayRate,
         UsedAiToOcr = UsedAiToOcr,
         AutoTest = AutoTest,
-        Courses = Courses.ToArray(),
+        CoursesByPlatform = _coursesByPlatform.ToDictionary(
+            pair => pair.Key,
+            pair => pair.Value.ToArray(),
+            StringComparer.Ordinal),
         CurrentAi = new AiSettingsSnapshot
         {
             AiProvider = CurrentAi.AiProvider,
@@ -237,9 +254,29 @@ public partial class GlobalSettings : ObservableObject, IDisposable
 
     private void ApplySnapshot(SettingsSnapshot snapshot)
     {
-        CurrentPlatform = ValueOrDefault(snapshot.CurrentPlatform, "学习通");
+        var currentPlatform = ValueOrDefault(snapshot.CurrentPlatform, LearningPlatformCatalog.XueXiTong);
+        _coursesByPlatform.Clear();
+        foreach (var pair in snapshot.CoursesByPlatform ?? [])
+        {
+            if (string.IsNullOrWhiteSpace(pair.Key))
+                continue;
+
+            _coursesByPlatform[pair.Key] = new ObservableCollection<string>(
+                (pair.Value ?? []).Where(course => !string.IsNullOrWhiteSpace(course)));
+        }
+
+        if (snapshot.Courses is { Length: > 0 } &&
+            !_coursesByPlatform.ContainsKey(currentPlatform))
+        {
+            _coursesByPlatform[currentPlatform] = new ObservableCollection<string>(
+                snapshot.Courses.Where(course => !string.IsNullOrWhiteSpace(course)));
+        }
+
+        CurrentPlatform = currentPlatform;
+        Courses = GetOrCreateCourses(currentPlatform);
         Pix2TextExecutablePath = ValueOrDefault(snapshot.Pix2TextExecutablePath,
             Path.Combine("Pix2TextRuntime", "Scripts", "p2t.exe"));
+        Pix2TextHost = ValueOrDefault(snapshot.Pix2TextHost, "127.0.0.1");
         Pix2TextPort = snapshot.Pix2TextPort is > 0 and <= 65535 ? snapshot.Pix2TextPort : 8503;
         BrowserCannel = ValueOrDefault(snapshot.BrowserCannel, "系统默认");
         JumpCompleted = snapshot.JumpCompleted;
@@ -254,15 +291,6 @@ public partial class GlobalSettings : ObservableObject, IDisposable
         UsedAiToOcr = snapshot.UsedAiToOcr;
         AutoTest = snapshot.AutoTest;
 
-        Courses.Clear();
-        foreach (var course in snapshot.Courses ?? [])
-        {
-            if (!string.IsNullOrWhiteSpace(course))
-            {
-                Courses.Add(course);
-            }
-        }
-
         var ai = snapshot.CurrentAi ?? new AiSettingsSnapshot();
         CurrentAi.AiProvider = ai.AiProvider;
         CurrentAi.Domain = ai.Domain;
@@ -272,6 +300,16 @@ public partial class GlobalSettings : ObservableObject, IDisposable
 
     private static string ValueOrDefault(string? value, string fallback) =>
         string.IsNullOrWhiteSpace(value) ? fallback : value;
+
+    private ObservableCollection<string> GetOrCreateCourses(string platform)
+    {
+        if (_coursesByPlatform.TryGetValue(platform, out var courses))
+            return courses;
+
+        courses = [];
+        _coursesByPlatform[platform] = courses;
+        return courses;
+    }
 
     private void ThrowIfDisposed() =>
         ObjectDisposedException.ThrowIf(Volatile.Read(ref _isDisposed) != 0, this);

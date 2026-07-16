@@ -41,8 +41,12 @@ public class PopupMask
         if (popup != null)
         {
             var pop = await popup.QuerySelectorAsync("div.popBottom");
+            if (pop is null)
+                return;
+
             var submit = await pop.QuerySelectorAsync("a.jb_btn");
-            await submit.ClickAsync();
+            if (submit is not null)
+                await submit.ClickAsync();
         }
         
     }

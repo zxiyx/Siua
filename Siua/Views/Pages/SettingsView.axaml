@@ -25,7 +25,10 @@
                         </StackPanel>
                         <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="13">
                             <icons:MaterialIcon Kind="Earth" Width="22" Height="22" Foreground="{DynamicResource SukiLowText}"/>
-                            <StackPanel Grid.Column="1"><TextBlock Text="自动化浏览器" FontWeight="SemiBold"/><TextBlock Text="用于登录平台和执行学习任务" FontSize="12" Foreground="{DynamicResource SukiLowText}"/></StackPanel>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                <TextBlock Text="自动化浏览器" FontWeight="SemiBold"/>
+                                <TextBlock Text="用于登录平台和执行学习任务" FontSize="12" Foreground="{DynamicResource SukiLowText}"/>
+                            </StackPanel>
                             <ComboBox Grid.Column="2" Width="160" ItemsSource="{Binding Browsers}" SelectedItem="{Binding CurrentBrowser}"/>
                         </Grid>
                         <Separator/>
@@ -49,12 +52,64 @@
                 <suki:GlassCard CornerRadius="14">
                     <StackPanel Spacing="16">
                         <StackPanel Orientation="Horizontal" Spacing="9">
+                            <icons:MaterialIcon Kind="Web" Width="21" Height="21"
+                                                Foreground="{DynamicResource SukiPrimaryColor}"/>
+                            <StackPanel Spacing="2">
+                                <TextBlock Text="Pix2Text 本地服务" FontSize="17" FontWeight="SemiBold"/>
+                                <TextBlock Text="配置 OCR 服务的监听端点与连接地址" FontSize="12"
+                                           Foreground="{DynamicResource SukiLowText}"/>
+                            </StackPanel>
+                        </StackPanel>
+
+                        <Grid ColumnDefinitions="Auto,*,220" ColumnSpacing="13">
+                            <icons:MaterialIcon Kind="Web" Width="22" Height="22"
+                                                Foreground="{DynamicResource SukiLowText}"/>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                <TextBlock Text="监听 IP" FontWeight="SemiBold"/>
+                                <TextBlock Text="支持 IPv4 与 IPv6，默认仅监听本机回环地址"
+                                           FontSize="12" Foreground="{DynamicResource SukiLowText}"/>
+                            </StackPanel>
+                            <TextBox Grid.Column="2" Height="36" Width="150" HorizontalAlignment="Right"
+                                     Text="{Binding Settings.Pix2TextHost}"
+                                     Watermark="127.0.0.1" TextAlignment="Center"/>
+                        </Grid>
+
+                        <Separator/>
+
+                        <Grid ColumnDefinitions="Auto,*,120" ColumnSpacing="13">
+                            <icons:MaterialIcon Kind="Timer" Width="22" Height="22"
+                                                Foreground="{DynamicResource SukiLowText}"/>
+                            <StackPanel Grid.Column="1">
+                                <TextBlock Text="监听端口" FontWeight="SemiBold"/>
+                                <TextBlock Text="用于健康检查和 Pix2Text OCR 请求"
+                                           FontSize="12" Foreground="{DynamicResource SukiLowText}"/>
+                            </StackPanel>
+                            <TextBox Grid.Column="2" Height="36"
+                                     Text="{Binding Settings.Pix2TextPort}"
+                                     Watermark="8503" TextAlignment="Center"/>
+                        </Grid>
+
+                        <StackPanel Orientation="Horizontal" Spacing="7">
+                            <icons:MaterialIcon Kind="InformationOutline" Width="16" Height="16"
+                                                Foreground="{DynamicResource SukiPrimaryColor}"/>
+                            <TextBlock Text="{Binding Pix2TextEndpointDescription}" FontSize="12"
+                                       Foreground="{DynamicResource SukiLowText}"/>
+                        </StackPanel>
+                    </StackPanel>
+                </suki:GlassCard>
+
+                <suki:GlassCard CornerRadius="14">
+                    <StackPanel Spacing="16">
+                        <StackPanel Orientation="Horizontal" Spacing="9">
                             <icons:MaterialIcon Kind="Robot" Width="21" Height="21" Foreground="{DynamicResource SukiPrimaryColor}"/>
                             <TextBlock Text="AI 与答题" FontSize="17" FontWeight="SemiBold"/>
                         </StackPanel>
                         <Grid ColumnDefinitions="Auto,*,180" ColumnSpacing="13">
                             <icons:MaterialIcon Kind="RobotLove" Width="22" Height="22" Foreground="{DynamicResource SukiLowText}"/>
-                            <StackPanel Grid.Column="1"><TextBlock Text="当前模型" FontWeight="SemiBold"/><TextBlock Text="用于答案分析与图像识别" FontSize="12" Foreground="{DynamicResource SukiLowText}"/></StackPanel>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                <TextBlock Text="当前模型" FontWeight="SemiBold"/>
+                                <TextBlock Text="用于答案分析与图像识别" FontSize="12" Foreground="{DynamicResource SukiLowText}"/>
+                            </StackPanel>
                             <TextBox Grid.Column="2" IsReadOnly="True" Text="{Binding Settings.CurrentAi.ModelName}" Watermark="尚未配置" TextAlignment="Center"/>
                         </Grid>
                         <Separator/>

@@ -17,17 +17,18 @@
     <suki:GlassCard Margin="20">
         <suki:GroupBox>
             <suki:GroupBox.Header>
-                <StackPanel Spacing="10" Orientation="Horizontal" >
+                <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto,Auto" ColumnSpacing="12">
                     <icons:MaterialIcon Height="20" Width="20" Kind="Notebook" 
                                         Foreground="{DynamicResource SukiPrimaryColor}"/>
-                    <TextBlock Text="运行日志" FontSize="16" VerticalAlignment="Center" FontWeight="DemiBold" HorizontalAlignment="Stretch"/>
-                    <StackPanel Margin="300,0,0,0" Orientation="Horizontal" Spacing="20">
-                        <CheckBox Content="提示" IsChecked="{Binding ShowInfo}"/>
-                        <CheckBox Content="报错" IsChecked="{Binding ShowError}"/>
-                        <CheckBox Content="浏览器" IsChecked="{Binding ShowBrowser}"/>
-                    </StackPanel>
-                    
-                </StackPanel>
+                    <TextBlock Grid.Column="1" Text="运行日志" FontSize="16" VerticalAlignment="Center" FontWeight="DemiBold"/>
+                    <CheckBox Grid.Column="2" Content="提示" IsChecked="{Binding ShowInfo}"/>
+                    <CheckBox Grid.Column="3" Content="报错" IsChecked="{Binding ShowError}"/>
+                    <CheckBox Grid.Column="4" Content="浏览器" IsChecked="{Binding ShowBrowser}"/>
+                    <Button Grid.Column="5" Classes="Basic" Command="{Binding ClearLogsCommand}"
+                            ToolTip.Tip="清空日志">
+                        <icons:MaterialIcon Kind="DeleteSweep" Width="18" Height="18"/>
+                    </Button>
+                </Grid>
             </suki:GroupBox.Header>
             
             <ListBox ItemsSource="{Binding Logs}" Background="Transparent" BorderThickness="0"

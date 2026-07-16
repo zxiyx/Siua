@@ -7,7 +7,7 @@ public interface ICoreService : IDisposable
 {
 
     bool IsSessionActive { get; }
-    Task<bool> LoadPlaywright();
+    Task<bool> LoadPlaywright(string courseUrl);
     Task<bool> ParsePage();
     void StopLoginHeartbeat();
 }

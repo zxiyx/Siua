@@ -79,6 +79,7 @@
                                 <TextBlock Text="API Key" FontWeight="SemiBold" Margin="5,0,0,0"/>
                                 <TextBox suki:TextBoxExtensions.Prefix="{icons:MaterialIconExt Kind=Key}"
                                          Classes="clearButton" Text="{Binding Settings.CurrentAi.ApiKey}"
+                                         PasswordChar="●"
                                          Watermark="请输入服务商提供的 API Key"/>
                             </StackPanel>
                             <StackPanel Spacing="5">

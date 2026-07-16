@@ -1,4 +1,6 @@
+using System.Collections.Generic;
 using System.IO;
+using Newtonsoft.Json;
 
 namespace Siua.Common;
 
@@ -6,6 +8,7 @@ internal sealed class SettingsSnapshot
 {
     public string CurrentPlatform { get; set; } = "学习通";
     public string Pix2TextExecutablePath { get; set; } = Path.Combine("Pix2TextRuntime", "Scripts", "p2t.exe");
+    public string Pix2TextHost { get; set; } = "127.0.0.1";
     public int Pix2TextPort { get; set; } = 8503;
     public string BrowserCannel { get; set; } = "系统默认";
     public bool JumpCompleted { get; set; } = true;
@@ -17,7 +20,11 @@ internal sealed class SettingsSnapshot
     public double VideoPlayRate { get; set; } = 1.0;
     public bool UsedAiToOcr { get; set; }
     public bool AutoTest { get; set; }
-    public string[] Courses { get; set; } = [];
+    public Dictionary<string, string[]> CoursesByPlatform { get; set; } = [];
+
+    // 兼容 1.0.8 及更早版本的单一课程列表，迁移后不再写入。
+    [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+    public string[]? Courses { get; set; }
     public AiSettingsSnapshot CurrentAi { get; set; } = new();
 }
 

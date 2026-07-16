@@ -5,7 +5,6 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
-using System.Runtime.InteropServices;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Siua.Interfaces;
@@ -39,19 +38,23 @@ public partial class MainViewModel : ViewModelBase
             if (page is null || ActivePage?.GetType() == pageType) return;
             ActivePage = page;
         };
+        ActivePage = Pages.FirstOrDefault();
         _log.AddLog("Run Successfully !");
     }
     
     [RelayCommand]
-    private static void OpenUrl(string url)
+    private void OpenUrl(string url)
     {
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-            Process.Start(new ProcessStartInfo(url.Replace("&", "^&")) { UseShellExecute = true });
-        /*;
-else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
-    Process.Start("xdg-open", url);
-else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
-    Process.Start("open", url);
-    */
+        if (string.IsNullOrWhiteSpace(url))
+            return;
+
+        try
+        {
+            Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+        }
+        catch (Exception exception)
+        {
+            _log.AddLog(LogLevel.Error, "App", $"无法打开链接：{exception.Message}");
+        }
     }
 }

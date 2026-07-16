@@ -4,30 +4,25 @@ using System.IO;
 using System.Threading.Tasks;
 using OpenAI;
 using OpenAI.Chat;
+using Siua.Common;
+using Siua.Interfaces;
 
 namespace Siua.Services;
 
 public class AiControlService
 {
     private readonly GlobalSettings _globalSettings;
-    private readonly OpenAIClient? _client;
+    private readonly ILogService _logService;
 
-    public AiControlService(GlobalSettings globalSettings)
+    public AiControlService(GlobalSettings globalSettings, ILogService logService)
     {
         _globalSettings = globalSettings;
-        if (globalSettings.CurrentAi.Domain is null)
-        {
-            return;
-        }
-
-        var authentication = new OpenAIAuthentication(globalSettings.CurrentAi.ApiKey);
-        var settings = new OpenAISettings(globalSettings.CurrentAi.Domain);
-        _client = new OpenAIClient(authentication, settings);
+        _logService = logService;
     }
 
     public async Task<string?> GetAnswer(string question)
     {
-        var client = _client;
+        using var client = CreateClient();
         if (client is null)
         {
             return null;
@@ -44,15 +39,16 @@ public class AiControlService
             var response = await client.ChatEndpoint.GetCompletionAsync(request);
             return response.FirstChoice.Message.Content.ToString();
         }
-        catch
+        catch (Exception exception)
         {
+            _logService.AddLog(LogLevel.Error, "AI", $"获取答案失败：{exception.Message}");
             return null;
         }
     }
 
     public async Task<string?> GetTextFromImage(string imagePath)
     {
-        var client = _client;
+        using var client = CreateClient();
         if (client is null)
         {
             return null;
@@ -76,14 +72,25 @@ public class AiControlService
             var response = await client.ChatEndpoint.GetCompletionAsync(request);
             return response.FirstChoice.Message.Content.ToString();
         }
-        catch
+        catch (Exception exception)
         {
+            _logService.AddLog(LogLevel.Error, "AI", $"图像识别失败：{exception.Message}");
             return null;
         }
     }
 
-    public void Dispose()
+    private OpenAIClient? CreateClient()
     {
-        _client?.Dispose();
+        var ai = _globalSettings.CurrentAi;
+        if (string.IsNullOrWhiteSpace(ai.Domain) ||
+            string.IsNullOrWhiteSpace(ai.ApiKey) ||
+            string.IsNullOrWhiteSpace(ai.ModelName))
+        {
+            return null;
+        }
+
+        var authentication = new OpenAIAuthentication(ai.ApiKey);
+        var settings = new OpenAISettings(ai.Domain.Trim());
+        return new OpenAIClient(authentication, settings);
     }
 }

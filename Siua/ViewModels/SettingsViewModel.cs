@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Threading.Tasks;
 using Avalonia.Collections;
 using Avalonia.Controls;
@@ -29,6 +30,14 @@ public partial class SettingsViewModel : PageBase
 
     public bool IsOverview => ActiveSubPage is null;
     public bool IsSubPageOpen => ActiveSubPage is not null;
+    public string Pix2TextEndpointDescription => Pix2TextEndpoint.TryCreate(
+        Settings.Pix2TextHost,
+        Settings.Pix2TextPort,
+        out _,
+        out var serviceUri,
+        out var errorMessage)
+        ? $"当前连接地址：{serviceUri}"
+        : errorMessage;
     public AiSettingsViewModel AiSettings { get; }
     public CourseEditViewModel CourseEditor { get; }
     
@@ -41,6 +50,7 @@ public partial class SettingsViewModel : PageBase
         AiSettings.RequestClose += CloseSubPage;
         CourseEditor.RequestClose += CloseSubPage;
         CurrentBrowser = Settings.BrowserCannel;
+        Settings.PropertyChanged += OnSettingsPropertyChanged;
     }
     partial void OnCurrentBrowserChanged(string value)
     {
@@ -54,4 +64,13 @@ public partial class SettingsViewModel : PageBase
     private void ShowCourseList() => ActiveSubPage = CourseEditor;
 
     private void CloseSubPage() => ActiveSubPage = null;
+
+    private void OnSettingsPropertyChanged(object? sender, PropertyChangedEventArgs eventArgs)
+    {
+        if (eventArgs.PropertyName is nameof(GlobalSettings.Pix2TextHost) or
+            nameof(GlobalSettings.Pix2TextPort))
+        {
+            OnPropertyChanged(nameof(Pix2TextEndpointDescription));
+        }
+    }
 }

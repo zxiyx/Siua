@@ -20,18 +20,16 @@ public partial class AiSettingsViewModel:ObservableObject
     [ObservableProperty] private bool _isAdding;
     public bool IsCustom => SelectedProvider == "自定义";
     [ObservableProperty]
-    private string _selectedProvider = "DeepSeek";
+    private string _selectedProvider = string.Empty;
     
     [ObservableProperty]
     private  GlobalSettings _settings;
     public AiSettingsViewModel(GlobalSettings globalSettings)
     {
         _settings = globalSettings;
-        if (_settings.CurrentAi.AiProvider != null)
-        {
-            SelectedProvider = _settings.CurrentAi.AiProvider;
-        }
-        
+        SelectedProvider = string.IsNullOrWhiteSpace(_settings.CurrentAi.AiProvider)
+            ? "DeepSeek"
+            : _settings.CurrentAi.AiProvider;
     }
 
     partial void OnSelectedProviderChanged(string value)

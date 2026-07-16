@@ -7,6 +7,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Playwright;
 using Microsoft.Win32;
+using Siua.Common;
 using Siua.Interfaces;
 using Siua.Core;
 
@@ -31,6 +32,8 @@ public sealed class CoreService : ICoreService
     private IPage? _page;
     private CancellationTokenSource? _loginHeartbeatCts;
     private CancellationTokenSource? _sessionCts;
+    private string? _activePlatform;
+    private string? _activeCourseUrl;
     private int _sessionEnded;
     private int _isDisposing;
 
@@ -46,13 +49,31 @@ public sealed class CoreService : ICoreService
         _aiControlService = aiControlService;
     }
 
-    public async Task<bool> LoadPlaywright()
+    public async Task<bool> LoadPlaywright(string courseUrl)
     {
         DisposeBrowserResources();
         _sessionCts = new CancellationTokenSource();
         Interlocked.Exchange(ref _sessionEnded, 0);
         _logService.Clear();
-        _logService.AddLog("正在启动浏览器");
+        var platform = _settings.CurrentPlatform;
+        if (!LearningPlatformCatalog.IsSupported(platform))
+        {
+            _logService.AddLog(LogLevel.Error, "Platform", $"平台「{platform}」尚未适配，无法启动任务");
+            DisposeBrowserResources();
+            return false;
+        }
+
+        if (!LearningPlatformCatalog.TryValidateCourseUrl(
+                platform, courseUrl, out var validatedCourseUrl, out var courseError))
+        {
+            _logService.AddLog(LogLevel.Error, "Platform", $"「{platform}」课程地址无效：{courseError}");
+            DisposeBrowserResources();
+            return false;
+        }
+
+        _activePlatform = platform;
+        _activeCourseUrl = validatedCourseUrl;
+        _logService.AddLog($"正在启动「{platform}」任务");
 
         try
         {
@@ -62,7 +83,7 @@ public sealed class CoreService : ICoreService
             RegisterSessionEvents(_browser, _page, _sessionCts);
             _page.Console += (_, message) => _logService.AddLog($"[Browser] {message.Text}");
 
-            await _page.GotoAsync(GetCourseUrl());
+            await _page.GotoAsync(validatedCourseUrl);
             await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
 
             if (IsLoginPage(_page.Url))
@@ -105,12 +126,17 @@ public sealed class CoreService : ICoreService
 
     public async Task<bool> ParsePage()
     {
+        if (!string.Equals(_activePlatform, LearningPlatformCatalog.XueXiTong, StringComparison.Ordinal))
+        {
+            _logService.AddLog(LogLevel.Error, "Platform", "当前任务没有可用的平台适配器");
+            return false;
+        }
+
         var page = _page;
         if (page is null || !IsSessionActive)
         {
             return false;
         }
-
         try
         {
             var cancellationToken = GetSessionToken();
@@ -207,7 +233,7 @@ public sealed class CoreService : ICoreService
     {
         foreach (var video in videos)
         {
-            if (await video.IsCompletedAsync())
+            if (_settings.JumpCompleted && await video.IsCompletedAsync())
             {
                 continue;
             }
@@ -243,7 +269,7 @@ public sealed class CoreService : ICoreService
         _logService.AddLog("检测到文档...");
         foreach (var document in documents)
         {
-            if (!document.IsCompleted)
+            if (_settings.JumpCompleted && document.IsCompleted)
             {
                 continue;
             }
@@ -328,16 +354,20 @@ public sealed class CoreService : ICoreService
             return DisableAutoTest("AI 配置异常，已关闭自动答题");
         }
 
+        var selectedCount = 0;
         foreach (var option in question.Answers)
         {
             var optionText = await option.Key.InnerTextAsync();
-            if (answer.Contains(optionText))
+            var optionMarker = await option.Value.InnerTextAsync();
+            if (AnswerSelectsOption(answer, optionMarker, optionText))
             {
                 await option.Key.ClickAsync();
+                selectedCount++;
             }
         }
 
-        return true;
+        return selectedCount > 0 ||
+               DisableAutoTest("AI 返回的答案无法匹配任何选项，已关闭自动答题");
     }
 
     private bool DisableAutoTest(string message)
@@ -345,6 +375,23 @@ public sealed class CoreService : ICoreService
         _settings.AutoTest = false;
         _logService.AddLog(message);
         return false;
+    }
+
+    private static bool AnswerSelectsOption(string answer, string marker, string optionText)
+    {
+        var markerCharacter = marker
+            .Trim()
+            .ToUpperInvariant()
+            .FirstOrDefault(character => character is >= 'A' and <= 'H');
+
+        if (markerCharacter != default &&
+            answer.ToUpperInvariant().Contains(markerCharacter))
+        {
+            return true;
+        }
+
+        return !string.IsNullOrWhiteSpace(optionText) &&
+               answer.Contains(optionText.Trim(), StringComparison.OrdinalIgnoreCase);
     }
 
     private void RegisterSessionEvents(
@@ -443,8 +490,8 @@ public sealed class CoreService : ICoreService
 
     private string GetCourseUrl()
     {
-        return _settings.Courses.FirstOrDefault()
-            ?? throw new InvalidOperationException("请先配置课程地址。");
+        return _activeCourseUrl
+            ?? throw new InvalidOperationException("当前任务没有有效的课程地址。");
     }
 
     private static bool IsLoginPage(string url)
@@ -521,6 +568,8 @@ public sealed class CoreService : ICoreService
             StopLoginHeartbeat();
             _page = null;
             _browser = null;
+            _activePlatform = null;
+            _activeCourseUrl = null;
             _playwright?.Dispose();
             _playwright = null;
             session?.Dispose();
