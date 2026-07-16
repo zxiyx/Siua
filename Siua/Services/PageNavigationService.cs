@@ -5,7 +5,7 @@ namespace Siua.Services;
 
 public class PageNavigationService
 {
-    public Action<Type>? NavigationRequested { get; set; }
+    public event Action<Type>? NavigationRequested;
 
     public void RequestNavigation<T>() where T : PageBase
     {

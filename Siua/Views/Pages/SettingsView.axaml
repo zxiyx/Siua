@@ -8,92 +8,74 @@
              xmlns:icons="clr-namespace:Material.Icons.Avalonia;assembly=Material.Icons.Avalonia"
              mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
              x:DataType="vm:SettingsViewModel"
-             x:Class="Siua.Views.Pages.SettingsView">
-    <ScrollViewer>
-        <StackPanel HorizontalAlignment="Stretch" Margin="30" 
-                    VerticalAlignment="Center">
-            <!--  browser  -->
-            <suki:GlassCard CornerRadius="25,25,0,0">
-                <suki:GroupBox >
-                        <suki:GroupBox.Header>
-                            <StackPanel Spacing="10" Orientation="Horizontal" Height="40">
-                                <icons:MaterialIcon Height="20" Width="20" Kind="Web" 
-                                                    Foreground="{DynamicResource SukiPrimaryColor}"/>
-                                <TextBlock Text="浏览器行为" FontSize="16" VerticalAlignment="Center" FontWeight="Bold"/>
-                            </StackPanel>
-                        </suki:GroupBox.Header>
-                    <DockPanel HorizontalSpacing="10">
-                        <icons:MaterialIcon DockPanel.Dock="Left"   Kind="Earth" Height="20" Width="20"
-                                            Foreground="{DynamicResource SukiLowText}"/>
-                        <StackPanel >
-                            <TextBlock Text="浏览器设置" FontSize="16" FontWeight="Bold"/>
-                            <TextBlock Text="选择用于进行自动化行为的浏览器" FontSize="16" Foreground="{DynamicResource SukiLowText}" />
-                        </StackPanel>
-                        <ComboBox DockPanel.Dock="Right" Width="150" ItemsSource="{Binding Browsers}"
-                                  SelectedItem="{Binding CurrentBrowser}" 
-                                  HorizontalAlignment="Right"/>
-                    </DockPanel>
-                    </suki:GroupBox>
-            </suki:GlassCard>
-            <suki:GlassCard CornerRadius="0,0,25,25">
-                <DockPanel HorizontalSpacing="10">
-                    <icons:MaterialIcon DockPanel.Dock="Left"   Kind="BookOpenVariant" Height="20" Width="20"
-                                        Foreground="{DynamicResource SukiLowText}"/>
-                    <StackPanel>
-                        <TextBlock Text="课程网址" FontSize="16" FontWeight="Bold"/>
-                        <TextBlock Text="含学习通课程的网址" FontSize="16" Foreground="{DynamicResource SukiLowText}" />
-                    </StackPanel>
-                    <Button p:ButtonExtensions.Icon="{icons:MaterialIconExt Kind=BookEdit}" Command="{Binding ShowCourseList}"
-                            Classes="Flat" DockPanel.Dock="Right" HorizontalAlignment="Right" Content="课程列表"/>
-                </DockPanel>
-            </suki:GlassCard>
-            <!--  AI   -->
-            <suki:GlassCard Margin="0,20,0,0" CornerRadius="25,25,0,0">
-                <suki:GroupBox >
-                        <suki:GroupBox.Header>
-                            <StackPanel Spacing="10" Orientation="Horizontal" Height="40">
-                                <icons:MaterialIcon Height="20" Width="20" Kind="Robot" 
-                                                    Foreground="{DynamicResource SukiPrimaryColor}"/>
-                                <TextBlock Text="AI模型匹配" FontSize="16" VerticalAlignment="Center" FontWeight="Bold"/>
-                            </StackPanel>
-                        </suki:GroupBox.Header>
-                    <DockPanel HorizontalSpacing="10">
-                        <icons:MaterialIcon DockPanel.Dock="Left"   Kind="RobotConfused" Height="20" 
-                                            Foreground="{DynamicResource SukiLowText}"/>
-                        <StackPanel >
-                            <TextBlock Text="当前使用模型" FontSize="16" FontWeight="Bold"/>
-                            <TextBlock Text="设置的Ai模型名称" FontSize="16" Foreground="{DynamicResource SukiLowText}" />
-                        </StackPanel>
-                        <TextBox DockPanel.Dock="Right" HorizontalAlignment="Right" Width="100"  IsReadOnly="True" Text="{Binding Settings.CurrentAi.ModelName}" TextAlignment="Center"/>
-                    </DockPanel>
-                    </suki:GroupBox>
-            </suki:GlassCard>
-            <suki:GlassCard CornerRadius="0,0,0,0">
-                <DockPanel HorizontalSpacing="10">
-                    <icons:MaterialIcon DockPanel.Dock="Left"   Kind="RobotConfused" Height="20" 
-                                        Foreground="{DynamicResource SukiLowText}"/>
-                    <StackPanel>
-                        <TextBlock Text="AI答题间隔" FontSize="16" FontWeight="Bold"/>
-                        <TextBlock Text="根据模型限制每分钟请求数填写" FontSize="16" Foreground="{DynamicResource SukiLowText}"  />
-                    </StackPanel>
-                    <TextBox DockPanel.Dock="Right" HorizontalAlignment="Right" Width="100" Text="{Binding Settings.AiAnsweringInterval}" TextAlignment="Center"/>
+             x:Class="Siua.Views.Pages.SettingsView"><Grid>
+        <ScrollViewer IsVisible="{Binding IsOverview}" HorizontalScrollBarVisibility="Disabled">
+            <StackPanel Margin="26" Spacing="18" MaxWidth="900" HorizontalAlignment="Stretch">
+                <StackPanel Spacing="4">
+                    <TextBlock Text="偏好设置" FontSize="27" FontWeight="SemiBold"/>
+                    <TextBlock Text="管理浏览器、课程来源与 AI 能力" FontSize="14"
+                               Foreground="{DynamicResource SukiLowText}"/>
+                </StackPanel>
 
-                </DockPanel>
-            </suki:GlassCard>
-            <suki:GlassCard CornerRadius="0,0,25,25">
-                <DockPanel HorizontalSpacing="10">
-                    <icons:MaterialIcon DockPanel.Dock="Left"   Kind="RobotConfused" Height="20" 
-                                        Foreground="{DynamicResource SukiLowText}"/>
-                    <StackPanel>
-                        <TextBlock Text="AI模型设置" FontSize="16" FontWeight="Bold"/>
-                        <TextBlock Text="添加或更改AI模型" FontSize="16" Foreground="{DynamicResource SukiLowText}"  />
+                <suki:GlassCard CornerRadius="14">
+                    <StackPanel Spacing="16">
+                        <StackPanel Orientation="Horizontal" Spacing="9">
+                            <icons:MaterialIcon Kind="Web" Width="21" Height="21" Foreground="{DynamicResource SukiPrimaryColor}"/>
+                            <TextBlock Text="课程与浏览器" FontSize="17" FontWeight="SemiBold"/>
+                        </StackPanel>
+                        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="13">
+                            <icons:MaterialIcon Kind="Earth" Width="22" Height="22" Foreground="{DynamicResource SukiLowText}"/>
+                            <StackPanel Grid.Column="1"><TextBlock Text="自动化浏览器" FontWeight="SemiBold"/><TextBlock Text="用于登录平台和执行学习任务" FontSize="12" Foreground="{DynamicResource SukiLowText}"/></StackPanel>
+                            <ComboBox Grid.Column="2" Width="160" ItemsSource="{Binding Browsers}" SelectedItem="{Binding CurrentBrowser}"/>
+                        </Grid>
+                        <Separator/>
+                        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="13">
+                            <icons:MaterialIcon Kind="ViewDashboard" Width="22" Height="22" Foreground="{DynamicResource SukiLowText}"/>
+                            <StackPanel Grid.Column="1"><TextBlock Text="当前平台" FontWeight="SemiBold"/><TextBlock Text="在课程工作台中切换平台" FontSize="12" Foreground="{DynamicResource SukiLowText}"/></StackPanel>
+                            <TextBlock Grid.Column="2" Text="{Binding Settings.CurrentPlatform}"
+                                       FontWeight="SemiBold" Foreground="{DynamicResource SukiPrimaryColor}"
+                                       VerticalAlignment="Center" Margin="12,0"/>
+                        </Grid>
+                        <Separator/>
+                        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="13">
+                            <icons:MaterialIcon Kind="BookOpenVariant" Width="22" Height="22" Foreground="{DynamicResource SukiLowText}"/>
+                            <StackPanel Grid.Column="1"><TextBlock Text="课程地址" FontWeight="SemiBold"/><TextBlock Text="维护当前平台需要处理的课程链接" FontSize="12" Foreground="{DynamicResource SukiLowText}"/></StackPanel>
+                            <Button Grid.Column="2" Classes="Flat" Content="管理课程" Command="{Binding ShowCourseListCommand}"
+                                    p:ButtonExtensions.Icon="{icons:MaterialIconExt Kind=ArrowRight}"/>
+                        </Grid>
                     </StackPanel>
-                    <Button p:ButtonExtensions.Icon="{icons:MaterialIconExt Kind=Settings}" Command="{Binding ShowAiSetting}"
-                            Classes="Flat" DockPanel.Dock="Right" HorizontalAlignment="Right" />
+                </suki:GlassCard>
 
-                </DockPanel>
-            </suki:GlassCard>
-        </StackPanel>
-    </ScrollViewer>
+                <suki:GlassCard CornerRadius="14">
+                    <StackPanel Spacing="16">
+                        <StackPanel Orientation="Horizontal" Spacing="9">
+                            <icons:MaterialIcon Kind="Robot" Width="21" Height="21" Foreground="{DynamicResource SukiPrimaryColor}"/>
+                            <TextBlock Text="AI 与答题" FontSize="17" FontWeight="SemiBold"/>
+                        </StackPanel>
+                        <Grid ColumnDefinitions="Auto,*,180" ColumnSpacing="13">
+                            <icons:MaterialIcon Kind="RobotLove" Width="22" Height="22" Foreground="{DynamicResource SukiLowText}"/>
+                            <StackPanel Grid.Column="1"><TextBlock Text="当前模型" FontWeight="SemiBold"/><TextBlock Text="用于答案分析与图像识别" FontSize="12" Foreground="{DynamicResource SukiLowText}"/></StackPanel>
+                            <TextBox Grid.Column="2" IsReadOnly="True" Text="{Binding Settings.CurrentAi.ModelName}" Watermark="尚未配置" TextAlignment="Center"/>
+                        </Grid>
+                        <Separator/>
+                        <Grid ColumnDefinitions="Auto,*,120" ColumnSpacing="13">
+                            <icons:MaterialIcon Kind="Timer" Width="22" Height="22" Foreground="{DynamicResource SukiLowText}"/>
+                            <StackPanel Grid.Column="1"><TextBlock Text="答题请求间隔" FontWeight="SemiBold"/><TextBlock Text="请按服务商每分钟请求限制填写（ms）" FontSize="12" Foreground="{DynamicResource SukiLowText}"/></StackPanel>
+                            <TextBox Grid.Column="2" Text="{Binding Settings.AiAnsweringInterval}" TextAlignment="Center"/>
+                        </Grid>
+                        <Separator/>
+                        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="13">
+                            <icons:MaterialIcon Kind="Tune" Width="22" Height="22" Foreground="{DynamicResource SukiLowText}"/>
+                            <StackPanel Grid.Column="1"><TextBlock Text="模型连接设置" FontWeight="SemiBold"/><TextBlock Text="选择服务商并填写 API Key 与模型名称" FontSize="12" Foreground="{DynamicResource SukiLowText}"/></StackPanel>
+                            <Button Grid.Column="2" Classes="Flat" Content="配置模型" Command="{Binding ShowAiSettingCommand}"
+                                    p:ButtonExtensions.Icon="{icons:MaterialIconExt Kind=ArrowRight}"/>
+                        </Grid>
+                    </StackPanel>
+                </suki:GlassCard>
+            </StackPanel>
+        </ScrollViewer>
+
+        <ContentControl IsVisible="{Binding IsSubPageOpen}" Content="{Binding ActiveSubPage}"/>
+    </Grid>
     
 </UserControl>

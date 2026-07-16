@@ -7,7 +7,7 @@
         xmlns:icons="clr-namespace:Material.Icons.Avalonia;assembly=Material.Icons.Avalonia"
         mc:Ignorable="d" Width="1000" Height="700"
         x:Class="Siua.Views.MainView"
-        x:DataType="vm:MainViewModel" Title="Siua">
+        x:DataType="vm:MainViewModel" Title="Siua - 多平台学习助手">
         <suki:SukiWindow.Hosts>
                 <suki:SukiToastHost Manager="{Binding ToastManager}" />
                 <suki:SukiDialogHost Manager="{Binding DialogManager}" />

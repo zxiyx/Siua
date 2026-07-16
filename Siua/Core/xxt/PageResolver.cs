@@ -5,128 +5,133 @@ using Microsoft.Playwright;
 
 namespace Siua.Core;
 
-public class PageResolver
+public sealed class PageResolver
 {
-    private IPage page;
-    private IFrame? mFrame;
-    public bool HasVideo=> Videos.Count > 0;
-    public bool HasTest => Tests.Count > 0;
-    public bool HasDoc => Docs.Count > 0;
-    private List<Video> videos = new();
-    private List<ChapterTest> tests = new();
-    private List<Doc> docs = new();
-    public List<Video> Videos => videos;
-    public List<Doc> Docs => docs;
-    public List<ChapterTest> Tests => tests;
+    private const string MainFrameSelector = "div.course_main > iframe";
+    private const string VideoContainerSelector = "p > div.videoContainer";
+    private const string AttachmentContainerSelector = "p > div.ans-attach-ct:not(.videoContainer)";
+
+    private readonly IPage _page;
     private readonly GlobalSettings _settings;
-    public PageResolver(IPage opage ,GlobalSettings settings)
+    private readonly List<Video> _videos = [];
+    private readonly List<ChapterTest> _tests = [];
+    private readonly List<Doc> _docs = [];
+    private IFrame? _mainFrame;
+
+    public PageResolver(IPage page, GlobalSettings settings)
     {
-        page = opage;
+        _page = page;
         _settings = settings;
     }
-    public async Task<bool> WaitLoading()
+
+    public IReadOnlyList<Video> Videos => _videos;
+    public IReadOnlyList<Doc> Docs => _docs;
+    public IReadOnlyList<ChapterTest> Tests => _tests;
+    public bool HasVideo => _videos.Count > 0;
+    public bool HasTest => _tests.Count > 0;
+    public bool HasDoc => _docs.Count > 0;
+
+    public async Task<bool> WaitLoadingAsync()
     {
         try
         {
-            await GetMainFrame();
-            return true;
+            var frameLocator = _page.Locator(MainFrameSelector).First;
+            await frameLocator.WaitForAsync();
+            var frameElement = await frameLocator.ElementHandleAsync();
+            _mainFrame = frameElement is null ? null : await frameElement.ContentFrameAsync();
+            return _mainFrame is not null;
         }
-        catch (Exception e)
+        catch (PlaywrightException)
         {
-            Console.WriteLine("[Error]WaitLoading :{0}", e);
+            _mainFrame = null;
             return false;
         }
     }
 
-    private async Task GetMainFrame()
+    public async Task ResolvePageAsync()
     {
-        var felement = page.Locator("div.course_main > iframe").First;
-        await felement.WaitForAsync();
+        _videos.Clear();
+        _docs.Clear();
+        _tests.Clear();
 
-        var frameHandle = await felement.ElementHandleAsync();
-        if (frameHandle == null)
+        if (_mainFrame is null)
         {
-            Console.WriteLine("[Error]找不到course_main 中 mframe");
-            mFrame = null;
             return;
         }
-        mFrame = await frameHandle.ContentFrameAsync();
-        if (mFrame == null) Console.WriteLine("[Error]mframe缺失");
-    }
-    public async Task ResolvePage()
-    {
-        if (mFrame == null)
-        {
-            Console.WriteLine("[Error]mframe未加载");
-            return;
-        }
-        var videoContainers = mFrame.Locator("p > div.videoContainer");
+
+        var videoContainers = _mainFrame.Locator(VideoContainerSelector);
         var videoCount = await videoContainers.CountAsync();
-        for (int i = 0; i < videoCount; i++)
+        for (var index = 0; index < videoCount; index++)
         {
-            videos.Add(new Video(videoContainers.Nth(i), _settings));
+            _videos.Add(new Video(videoContainers.Nth(index), _settings));
         }
-        var confContainers = mFrame.Locator("p > div.ans-attach-ct:not(.videoContainer)");
-        var Count = await confContainers.CountAsync();
-        for (int i = 0; i < Count; i++)
+
+        var attachmentContainers = _mainFrame.Locator(AttachmentContainerSelector);
+        var attachmentCount = await attachmentContainers.CountAsync();
+        for (var index = 0; index < attachmentCount; index++)
         {
-            var dresolver = new DocResolver(confContainers.Nth(i));
-            var isDoc = await dresolver.ResloveToDoc();
-            if (isDoc)
+            var container = attachmentContainers.Nth(index);
+            var document = await new DocResolver(container).ResolveAsync();
+            if (document is not null)
             {
-                docs.Add(new Doc(dresolver.Dframe, await dresolver.IsCompleted()));
+                _docs.Add(document);
             }
-            else  tests.Add(new ChapterTest(confContainers.Nth(i)));;
+            else
+            {
+                _tests.Add(new ChapterTest(container));
+            }
         }
-        
     }
-    public async Task WaitForSubmitAgain()
+
+    public async Task ConfirmTestSubmissionAsync()
     {
-        var popup = page.Locator("div.maskDiv > div.popDiv.wid440.Marking").First;
-        await popup.WaitForAsync(new ()
+        var popup = _page.Locator("div.maskDiv > div.popDiv.wid440.Marking").First;
+        await popup.WaitForAsync(new LocatorWaitForOptions
         {
             State = WaitForSelectorState.Visible,
             Timeout = _settings.PopupTimeout
         });
-        if (await popup.CountAsync() > 0)
+
+        var submitButton = popup.Locator("#popok").First;
+        if (await submitButton.CountAsync() > 0)
         {
-            var submit = popup.First.Locator("#popok");
-            if (await submit.CountAsync() > 0)
-            {
-                await submit.First.ClickAsync();
-            }
+            await submitButton.ClickAsync();
         }
     }
+
     public async Task NextPageAsync()
     {
-        var next = page.Locator("#prevNextFocus > #prevNextFocusNext").First;
-        await next.WaitForAsync();
-        await next.ClickAsync();
-        await page.WaitForLoadStateAsync(LoadState.DOMContentLoaded);
-        await WaitForCloseNotice();
+        var nextButton = _page.Locator("#prevNextFocus > #prevNextFocusNext").First;
+        await nextButton.WaitForAsync();
+        await nextButton.ClickAsync();
+        await _page.WaitForLoadStateAsync(LoadState.DOMContentLoaded);
+        await CloseChapterNoticeAsync();
     }
-    private async Task WaitForCloseNotice()
+
+    private async Task CloseChapterNoticeAsync()
     {
         try
         {
-            var popup = page.Locator("div.popHead > #popHeadFocus");
-            await popup.WaitForAsync(new()
-            {      
+            var popup = _page.Locator("div.popHead > #popHeadFocus");
+            await popup.WaitForAsync(new LocatorWaitForOptions
+            {
                 State = WaitForSelectorState.Visible,
                 Timeout = _settings.PopupTimeout
             });
-            if (await popup.CountAsync() > 0)
+
+            var nextButton = _page.Locator("div.popBottom > a.jb_btn.nextChapter").First;
+            if (await nextButton.CountAsync() > 0 && await nextButton.IsVisibleAsync())
             {
-                var nextbut = page.Locator("div.popBottom > a.jb_btn.nextChapter");
-                if (await nextbut.CountAsync() > 0 && await nextbut.First.IsVisibleAsync())
-                {
-                    await nextbut.First.ClickAsync();
-                }
+                await nextButton.ClickAsync();
             }
         }
-        catch
+        catch (TimeoutException)
         {
-            Console.WriteLine("未找到Pop");
+            // 章节提示并非每次都会出现。
+        }
+        catch (PlaywrightException)
+        {
+            // 页面跳转可能会使提示元素失效，不影响后续章节处理。
         }
     }
 }

@@ -5,124 +5,114 @@ using Microsoft.Playwright;
 
 namespace Siua.Core;
 
-public class ChapterTest
+public sealed class ChapterTest
 {
-    private IFrame? fframe;
-    private string chapterTitle;
-    private string score;
-    private bool isCompleted = false;
-    private ILocator? ceyanDiv;
-    private ILocator handle;
-    private ILocator? form;
-    private List<Question> questions = new();
-    public List<Question> Questions => questions;
+    private readonly ILocator _container;
+    private readonly List<Question> _questions = [];
+    private ILocator? _testPanel;
 
-    public bool IsCompleted => isCompleted;
-    public string Score
+    public ChapterTest(ILocator container)
     {
-        get => score;
+        _container = container;
     }
 
-    public bool HasQuestion
+    public IReadOnlyList<Question> Questions => _questions;
+    public bool IsCompleted { get; private set; }
+    public bool HasQuestion => _questions.Count > 0;
+
+    public async Task SubmitAnswerAsync()
     {
-        get => questions.Count > 0;
-    }
-    public ChapterTest(ILocator data)
-    {
-        handle = data;
-    }
-    public async Task SubmitAnswer()
-    {
-        var submitcontainer = ceyanDiv!.Locator("div.ZY_sub.clearfix");
-        if (await submitcontainer.CountAsync() > 0 && await submitcontainer.IsVisibleAsync())
+        if (_testPanel is null)
         {
-            var submitbuttion = submitcontainer.Locator("a.btnSubmit");
-            if (await submitbuttion.CountAsync() > 0)
-            {
-                await submitbuttion.First.ClickAsync();
-            }
+            return;
+        }
+        var submitContainer = _testPanel.Locator("div.ZY_sub.clearfix");
+        if (await submitContainer.CountAsync() == 0 || !await submitContainer.IsVisibleAsync())
+        {
+            return;
+        }
+        var submitButton = submitContainer.Locator("a.btnSubmit").First;
+        if (await submitButton.CountAsync() > 0)
+        {
+            await submitButton.ClickAsync();
         }
     }
 
-    private async Task WaitForLoading()
+    public async Task LoadQuestionsAsync()
     {
-        var fcontainer = handle.Locator("iframe").First;
-        await fcontainer.WaitForAsync();
-        var frame = await (await fcontainer.ElementHandleAsync())!.ContentFrameAsync();
+        _questions.Clear();
+        var frame = await GetRequiredContentFrameAsync(_container.Locator("iframe").First);
+        var innerFrame = await GetRequiredContentFrameAsync(frame.Locator("iframe").First);
 
-        var ifcontainer = frame!.Locator("iframe").First;
-        await ifcontainer.WaitForAsync();
-        fframe = await (await ifcontainer.ElementHandleAsync())!.ContentFrameAsync();
+        IsCompleted = await innerFrame.Locator("div.testTit_status_complete").CountAsync() > 0;
+        _testPanel = innerFrame.Locator("div.radiusBG > div.CeYan");
+        if (IsCompleted)
+        {
+            return;
+        }
 
-        isCompleted = await fframe!.Locator("div.testTit_status_complete").CountAsync() > 0;
+        var questionsContainer = _testPanel.Locator("form #ZyBottom");
+        await questionsContainer.Locator("div.TiMu.newTiMu").First.WaitForAsync();
+        var questionLocators = questionsContainer.Locator("div.singleQuesId > div.TiMu.newTiMu");
+        var count = await questionLocators.CountAsync();
+        for (var index = 0; index < count; index++)
+        {
+            _questions.Add(new Question(questionLocators.Nth(index)));
+        }
     }
 
-    public async Task GetTitleAndQuestions()
+    private static async Task<IFrame> GetRequiredContentFrameAsync(ILocator locator)
     {
-        await WaitForLoading();
-        ceyanDiv = fframe!.Locator("div.radiusBG > div.CeYan");
-        form = ceyanDiv.Locator("form");
-        var zyb = form.Locator("#ZyBottom");
-        if (!IsCompleted)
-        {
-            await zyb.Locator("div.TiMu.newTiMu").First.WaitForAsync();
-            var tms = zyb.Locator("div.singleQuesId > div.TiMu.newTiMu");
-            var count = await tms.CountAsync();
-            for (int i = 0; i < count; i++)
-            {
-                questions.Add(new Question(tms.Nth(i)));
-            }
-        }
+        await locator.WaitForAsync();
+        var element = await locator.ElementHandleAsync()
+            ?? throw new PlaywrightException("无法获取测试 iframe 元素。");
+        return await element.ContentFrameAsync()
+            ?? throw new PlaywrightException("无法进入测试 iframe。");
     }
 }
 
-public class Question
+public sealed class Question
 {
-    private string title;
-    public string Title => title;
-    private Dictionary<ILocator, ILocator> answers = new();
-    public Dictionary<ILocator, ILocator> Answers => answers;
+    private readonly ILocator _container;
+    private readonly Dictionary<ILocator, ILocator> _answers = [];
 
-    private ILocator handle;
-    public Question(ILocator data)
+    public Question(ILocator container)
     {
-        handle = data;
+        _container = container;
     }
 
-    private async Task WairForLoading()
-    {
-        var tvar = handle.Locator("div.Zy_TItle.clearfix").First;
-        await tvar.WaitForAsync();
-        title = await tvar.InnerTextAsync();
-    }
+    public string Title { get; private set; } = string.Empty;
+    public IReadOnlyDictionary<ILocator, ILocator> Answers => _answers;
 
-    public async Task GetAnswers()
+    public async Task LoadAnswersAsync()
     {
-        await WairForLoading();
-        var lis = handle.Locator("li");
-        var count = await lis.CountAsync();
-        for (int i = 0; i < count; i++)
+        _answers.Clear();
+        var titleLocator = _container.Locator("div.Zy_TItle.clearfix").First;
+        await titleLocator.WaitForAsync();
+        Title = await titleLocator.InnerTextAsync();
+
+        var answerItems = _container.Locator("li");
+        var count = await answerItems.CountAsync();
+        for (var index = 0; index < count; index++)
         {
-            var l = lis.Nth(i);
-            answers[l.Locator("label")] = l.Locator("a");
+            var item = answerItems.Nth(index);
+            _answers[item.Locator("label")] = item.Locator("a");
         }
     }
 
-    public async Task<byte[]?> GetImageForQuestion()
+    public async Task<byte[]?> CaptureImageAsync()
     {
         try
         {
-            var options = new LocatorScreenshotOptions()
+            return await _container.ScreenshotAsync(new LocatorScreenshotOptions
             {
                 Animations = ScreenshotAnimations.Disabled,
                 Type = ScreenshotType.Png,
                 Timeout = 5000
-            };
-            return await handle.ScreenshotAsync(options);
+            });
         }
-        catch (Exception e)
+        catch (PlaywrightException)
         {
-            Console.WriteLine($"[Error] GetImageForQuestion: {e}");
             return null;
         }
     }

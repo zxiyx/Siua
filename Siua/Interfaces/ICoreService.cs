@@ -1,14 +1,13 @@
-﻿using System.Threading.Tasks;
+﻿using System;
+using System.Threading.Tasks;
 
 namespace Siua.Interfaces;
 
-public interface ICoreService
+public interface ICoreService : IDisposable
 {
 
-    public Task LoadPlaywright();
-
-    public Task ParsePage();
-
-    public void StopLoginHeartbeat();
-    public void Dispose();
+    bool IsSessionActive { get; }
+    Task<bool> LoadPlaywright();
+    Task<bool> ParsePage();
+    void StopLoginHeartbeat();
 }

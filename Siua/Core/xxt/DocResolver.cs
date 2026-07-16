@@ -4,63 +4,44 @@ using Microsoft.Playwright;
 
 namespace Siua.Core;
 
-public class DocResolver
+public sealed class DocResolver
 {
 
-    private ILocator handle;
-    private IFrame dframe;
+    private const string IncompleteIconSelector = "div.ans-job-icon[aria-label='任务点未完成']";
+    private readonly ILocator _container;
 
-    public IFrame Dframe { get => dframe; }
-    
-
-    public DocResolver(ILocator data)
+    public DocResolver(ILocator container)
     {
-        handle = data;
-
+        _container = container;
     }
-    public async Task<bool> IsCompleted()
+
+    public async Task<Doc?> ResolveAsync()
     {
         try
         {
-            var icon = handle.Locator("div.ans-job-icon[aria-label='任务点未完成']");
-            return await icon.CountAsync() == 0;
-        }
-        catch
-        {
-            return true;
-        }
-    }
-    public async Task<bool> ResloveToDoc()
-    {
-        try
-        {
-            var frameLocator = handle.Locator("iframe").First;
-            var frame = await (await frameLocator.ElementHandleAsync())!.ContentFrameAsync();
-            if (await frame.Locator("#docContainer").CountAsync() > 0)
+            var outerFrame = await GetContentFrameAsync(_container.Locator("iframe").First);
+            if (outerFrame is null || await outerFrame.Locator("#docContainer").CountAsync() == 0)
             {
-                Console.WriteLine(await frame.Locator("#panView").CountAsync());
-                var docContainer = frame.Locator("#panView").Last;
-                var iframe = await (await docContainer.ElementHandleAsync())!.ContentFrameAsync();
-                Console.WriteLine(await iframe.ContentAsync());
-                /*
-                if (await fframe!.Locator("div.fileBox").CountAsync() > 0)
-                {
-                    return fframe!.Locator("div.fileBox").First;
-                }
-                */
-                if (iframe != null)
-                {
-                    dframe = iframe;
-                }
-                else return false;
-                return true;
+                return null;
             }
-            return false;
+
+            var documentFrame = await GetContentFrameAsync(outerFrame.Locator("#panView").Last);
+            if (documentFrame is null)
+            {
+                return null;
+            }
+            var isCompleted = await _container.Locator(IncompleteIconSelector).CountAsync() == 0;
+            return new Doc(documentFrame, isCompleted);
         }
-        catch(PlaywrightException exception)
+        catch (PlaywrightException)
         {
-            return false;
+            return null;
         }
-        
+    }
+
+    private static async Task<IFrame?> GetContentFrameAsync(ILocator locator)
+    {
+        var element = await locator.ElementHandleAsync();
+        return element is null ? null : await element.ContentFrameAsync();
     }
 }

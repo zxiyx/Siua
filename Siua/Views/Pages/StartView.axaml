@@ -9,152 +9,165 @@
              xmlns:icons="clr-namespace:Material.Icons.Avalonia;assembly=Material.Icons.Avalonia"
              xmlns:suki="clr-namespace:SukiUI.Controls;assembly=SukiUI"
              x:Class="Siua.Views.Pages.StartView">
-    <ScrollViewer>
-        <StackPanel HorizontalAlignment="Stretch" Margin="30" 
-                    VerticalAlignment="Center">
-            <!--  start  -->
-            <suki:GlassCard CornerRadius="25,25,0,0">
-                <suki:GroupBox >
-                        <suki:GroupBox.Header>
-                            <StackPanel Spacing="10" Orientation="Horizontal" Height="40">
-                                <icons:MaterialIcon Height="20" Width="20" Kind="Menu" 
-                                                    Foreground="{DynamicResource SukiPrimaryColor}"/>
-                                <TextBlock Text="开始使用" FontSize="16" VerticalAlignment="Center" FontWeight="Bold"/>
+    <UserControl.Resources>
+        <vm:StringEqualsConverter x:Key="StringEquals"/>
+    </UserControl.Resources>
+
+    <ScrollViewer HorizontalScrollBarVisibility="Disabled">
+        <StackPanel Margin="26" Spacing="18" MaxWidth="980" HorizontalAlignment="Stretch">
+            <Grid ColumnDefinitions="*,Auto">
+                <StackPanel Spacing="4">
+                    <TextBlock Text="课程工作台" FontSize="27" FontWeight="SemiBold"/>
+                    <TextBlock Text="选择平台，配置本次学习任务" FontSize="14"
+                               Foreground="{DynamicResource SukiLowText}"/>
+                </StackPanel>
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="7"
+                            Margin="12,0" VerticalAlignment="Center">
+                    <icons:MaterialIcon Kind="CheckCircle" Width="16" Height="16"
+                                        Foreground="{DynamicResource SukiPrimaryColor}"/>
+                    <TextBlock Text="{Binding PlatformAvailabilityText}" FontSize="13"
+                               Foreground="{DynamicResource SukiPrimaryColor}"/>
+                </StackPanel>
+            </Grid>
+
+            <suki:GlassCard CornerRadius="14">
+                <StackPanel Spacing="14">
+                    <StackPanel Orientation="Horizontal" Spacing="9">
+                        <icons:MaterialIcon Kind="ViewDashboard" Width="21" Height="21"
+                                            Foreground="{DynamicResource SukiPrimaryColor}"/>
+                        <TextBlock Text="选择学习平台" FontSize="17" FontWeight="SemiBold"/>
+                    </StackPanel>
+
+                    <WrapPanel Orientation="Horizontal">
+                        <RadioButton Classes="GigaChips" GroupName="Platform" Width="198" Height="86" Margin="0,0,10,10"
+                                     IsChecked="{Binding SelectedPlatform, Converter={StaticResource StringEquals}, ConverterParameter=学习通}">
+                            <StackPanel Orientation="Horizontal" Spacing="11">
+                                <icons:MaterialIcon Kind="School" Width="27" Height="27"/>
+                                <StackPanel Spacing="3">
+                                    <TextBlock Text="学习通" FontSize="16" FontWeight="SemiBold"/>
+                                    <TextBlock Text="超星 · 已适配" FontSize="12" Opacity="0.72"/>
+                                </StackPanel>
                             </StackPanel>
-                        </suki:GroupBox.Header>
-                    <DockPanel HorizontalSpacing="10">
-                        <icons:MaterialIcon DockPanel.Dock="Left"   Kind="Play" Height="20" Width="20"
-                                            Foreground="{DynamicResource SukiLowText}"/>
-                        <StackPanel >
-                            <TextBlock Text="启动浏览器" FontSize="16" FontWeight="Bold"/>
-                            <TextBlock Text="启动设置的浏览器来刷课" FontSize="16" Foreground="{DynamicResource SukiLowText}" />
-                        </StackPanel>
-                        <Button p:ButtonExtensions.Icon="{icons:MaterialIconExt Kind=Play}" Classes="Flat" DockPanel.Dock="Right"
-                                HorizontalAlignment="Right" Content="启动" Command="{Binding StartRunning}" 
-                                p:ButtonExtensions.ShowProgress="{Binding IsRunning}"/>
-                    </DockPanel>
-                    </suki:GroupBox>
+                        </RadioButton>
+                        <RadioButton Classes="GigaChips" GroupName="Platform" Width="198" Height="86" Margin="0,0,10,10"
+                                     IsChecked="{Binding SelectedPlatform, Converter={StaticResource StringEquals}, ConverterParameter=智慧树}">
+                            <StackPanel Orientation="Horizontal" Spacing="11">
+                                <icons:MaterialIcon Kind="Tree" Width="27" Height="27"/>
+                                <StackPanel Spacing="3">
+                                    <TextBlock Text="智慧树" FontSize="16" FontWeight="SemiBold"/>
+                                    <TextBlock Text="知到 · 适配中" FontSize="12" Opacity="0.72"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </RadioButton>
+                        <RadioButton Classes="GigaChips" GroupName="Platform" Width="198" Height="86" Margin="0,0,10,10"
+                                     IsChecked="{Binding SelectedPlatform, Converter={StaticResource StringEquals}, ConverterParameter=中国大学MOOC}">
+                            <StackPanel Orientation="Horizontal" Spacing="11">
+                                <icons:MaterialIcon Kind="Earth" Width="27" Height="27"/>
+                                <StackPanel Spacing="3">
+                                    <TextBlock Text="中国大学 MOOC" FontSize="15" FontWeight="SemiBold"/>
+                                    <TextBlock Text="爱课程 · 适配中" FontSize="12" Opacity="0.72"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </RadioButton>
+                        <RadioButton Classes="GigaChips" GroupName="Platform" Width="198" Height="86" Margin="0,0,10,10"
+                                     IsChecked="{Binding SelectedPlatform, Converter={StaticResource StringEquals}, ConverterParameter=学堂在线}">
+                            <StackPanel Orientation="Horizontal" Spacing="11">
+                                <icons:MaterialIcon Kind="BookOpenVariant" Width="27" Height="27"/>
+                                <StackPanel Spacing="3">
+                                    <TextBlock Text="学堂在线" FontSize="16" FontWeight="SemiBold"/>
+                                    <TextBlock Text="XuetangX · 适配中" FontSize="12" Opacity="0.72"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </RadioButton>
+                    </WrapPanel>
+                </StackPanel>
             </suki:GlassCard>
-            <suki:GlassCard CornerRadius="0,0,0,0">
-                <DockPanel HorizontalSpacing="10">
-                    <icons:MaterialIcon DockPanel.Dock="Left"   Kind="ArrowUDownRight" Height="20" Width="20"
-                                        Foreground="{DynamicResource SukiLowText}"/>
-                    <StackPanel>
-                        <TextBlock Text="跳过已完成" FontSize="16" FontWeight="Bold"/>
-                        <TextBlock Text="跳过已完成的视频/章节测试" FontSize="16" Foreground="{DynamicResource SukiLowText}" />
+
+            <suki:GlassCard CornerRadius="14">
+                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14">
+                    <icons:MaterialIcon Kind="PlayCircle" Width="32" Height="32"
+                                        VerticalAlignment="Center"
+                                        Foreground="{DynamicResource SukiPrimaryColor}"/>
+                    <StackPanel Grid.Column="1" Spacing="3" VerticalAlignment="Center">
+                        <TextBlock Text="开始当前平台任务" FontSize="17" FontWeight="SemiBold"/>
+                        <TextBlock FontSize="13" Foreground="{DynamicResource SukiLowText}">
+                            <Run Text="当前选择："/><Run Text="{Binding SelectedPlatform}"/>
+                        </TextBlock>
                     </StackPanel>
-                    <ToggleButton Classes="Switch" DockPanel.Dock="Right" IsChecked="{Binding Settings.JumpCompleted}" HorizontalAlignment="Right"/>
-                </DockPanel>
+                    <Button Grid.Column="2" Classes="Flat" MinWidth="116" Height="40"
+                            Command="{Binding StartRunningCommand}"
+                            IsEnabled="{Binding IsSelectedPlatformSupported}"
+                            Content="启动学习"
+                            p:ButtonExtensions.Icon="{icons:MaterialIconExt Kind=Play}"
+                            p:ButtonExtensions.ShowProgress="{Binding IsRunning}"/>
+                </Grid>
             </suki:GlassCard>
-            <suki:GlassCard CornerRadius="0,0,0,0">
-                <DockPanel HorizontalSpacing="10">
-                    <icons:MaterialIcon DockPanel.Dock="Left"   Kind="TimerAlert" Height="20" Width="20"
-                                        Foreground="{DynamicResource SukiLowText}"/>
-                    <StackPanel>
-                        <TextBlock Text="Popup等待时长" FontSize="16" FontWeight="Bold"/>
-                        <TextBlock Text="等待并关闭弹出的提示窗口的时间（单位/ms）" FontSize="16" Foreground="{DynamicResource SukiLowText}" />
-                    </StackPanel>
-                    <TextBox DockPanel.Dock="Right" HorizontalAlignment="Right" Width="100" Text="{Binding Settings.PopupTimeout}" TextAlignment="Center"/>
-                </DockPanel>
-            </suki:GlassCard>
-            <suki:GlassCard CornerRadius="0,0,25,25">
-                <DockPanel HorizontalSpacing="10">
-                    <icons:MaterialIcon DockPanel.Dock="Left"   Kind="Timer" Height="20" Width="20"
-                                        Foreground="{DynamicResource SukiLowText}"/>
-                    <StackPanel>
-                        <TextBlock Text="章节跳转间隔" FontSize="16" FontWeight="Bold"/>
-                        <TextBlock Text="跳转章节的等待时间(单位ms)" FontSize="16" Foreground="{DynamicResource SukiLowText}" />
-                    </StackPanel>
-                    <TextBox DockPanel.Dock="Right" HorizontalAlignment="Right" Width="100" Text="{Binding Settings.ChapterJumpInterval}" TextAlignment="Center"/>
-                </DockPanel>
-            </suki:GlassCard>
-            <!--  video  -->
-            <suki:GlassCard CornerRadius="25,25,0,0" Margin="0,20,0,0">
-                <suki:GroupBox >
-                    <suki:GroupBox.Header>
-                        <StackPanel Spacing="10" Orientation="Horizontal" Height="40">
-                            <icons:MaterialIcon Height="20" Width="20" Kind="PlayCircle" 
+
+            <Grid ColumnDefinitions="*,*" ColumnSpacing="18">
+                <suki:GlassCard CornerRadius="14">
+                    <StackPanel Spacing="14">
+                        <StackPanel Orientation="Horizontal" Spacing="9">
+                            <icons:MaterialIcon Kind="PlayCircle" Width="21" Height="21"
                                                 Foreground="{DynamicResource SukiPrimaryColor}"/>
-                            <TextBlock Text="视频播放" FontSize="16" VerticalAlignment="Center" FontWeight="Bold"/>
+                            <TextBlock Text="视频策略" FontSize="17" FontWeight="SemiBold"/>
                         </StackPanel>
-                    </suki:GroupBox.Header>
-                    <DockPanel HorizontalSpacing="10">
-                        <icons:MaterialIcon DockPanel.Dock="Left"   Kind="SettingsVoice" Height="20" Width="20"
-                                            Foreground="{DynamicResource SukiLowText}"/>
-                        <StackPanel >
-                            <TextBlock Text="静音播放" FontSize="16" FontWeight="Bold"/>
-                            <TextBlock Text="播放视频时静音" FontSize="16" Foreground="{DynamicResource SukiLowText}" />
+                        <Grid ColumnDefinitions="*,Auto">
+                            <StackPanel><TextBlock Text="静音播放" FontWeight="SemiBold"/><TextBlock Text="播放视频时保持静音" FontSize="12" Foreground="{DynamicResource SukiLowText}"/></StackPanel>
+                            <ToggleButton Grid.Column="1" Classes="Switch" IsChecked="{Binding Settings.IsMuted}"/>
+                        </Grid>
+                        <Separator/>
+                        <Grid ColumnDefinitions="*,Auto">
+                            <StackPanel><TextBlock Text="尝试快速完成" FontWeight="SemiBold"/><TextBlock Text="允许时拉满视频进度" FontSize="12" Foreground="{DynamicResource SukiLowText}"/></StackPanel>
+                            <ToggleButton Grid.Column="1" Classes="Switch" IsChecked="{Binding Settings.TryFinishVideo}"/>
+                        </Grid>
+                        <Separator/>
+                        <Grid ColumnDefinitions="*,110">
+                            <StackPanel><TextBlock Text="播放倍速" FontWeight="SemiBold"/><TextBlock Text="建议保持平台允许范围" FontSize="12" Foreground="{DynamicResource SukiLowText}"/></StackPanel>
+                            <TextBox Grid.Column="1" Text="{Binding Settings.VideoPlayRate}" TextAlignment="Center"/>
+                        </Grid>
+                    </StackPanel>
+                </suki:GlassCard>
+
+                <suki:GlassCard Grid.Column="1" CornerRadius="14">
+                    <StackPanel Spacing="14">
+                        <StackPanel Orientation="Horizontal" Spacing="9">
+                            <icons:MaterialIcon Kind="Tune" Width="21" Height="21" Foreground="{DynamicResource SukiPrimaryColor}"/>
+                            <TextBlock Text="流程策略" FontSize="17" FontWeight="SemiBold"/>
                         </StackPanel>
-                        <ToggleButton Classes="Switch" IsChecked="{Binding Settings.IsMuted}" DockPanel.Dock="Right" HorizontalAlignment="Right"/>
-                         </DockPanel>
-                </suki:GroupBox>
-            </suki:GlassCard>
-            <suki:GlassCard CornerRadius="0,0,0,0">
-                <DockPanel HorizontalSpacing="10">
-                    <icons:MaterialIcon DockPanel.Dock="Left"   Kind="Flash" Height="20" Width="20"
-                                        Foreground="{DynamicResource SukiLowText}"/>
-                    <StackPanel>
-                        <TextBlock Text="一键看完视频" FontSize="16" FontWeight="Bold"/>
-                        <TextBlock Text="尝试拉满视频进度条(如果可以)" FontSize="16" Foreground="{DynamicResource SukiLowText}" />
+                        <Grid ColumnDefinitions="*,Auto">
+                            <StackPanel><TextBlock Text="跳过已完成内容" FontWeight="SemiBold"/><TextBlock Text="忽略已完成章节与测试" FontSize="12" Foreground="{DynamicResource SukiLowText}"/></StackPanel>
+                            <ToggleButton Grid.Column="1" Classes="Switch" IsChecked="{Binding Settings.JumpCompleted}"/>
+                        </Grid>
+                        <Separator/>
+                        <Grid ColumnDefinitions="*,110">
+                            <StackPanel><TextBlock Text="弹窗等待" FontWeight="SemiBold"/><TextBlock Text="关闭提示弹窗的延时（ms）" FontSize="12" Foreground="{DynamicResource SukiLowText}"/></StackPanel>
+                            <TextBox Grid.Column="1" Text="{Binding Settings.PopupTimeout}" TextAlignment="Center"/>
+                        </Grid>
+                        <Separator/>
+                        <Grid ColumnDefinitions="*,110">
+                            <StackPanel><TextBlock Text="章节间隔" FontWeight="SemiBold"/><TextBlock Text="切换下一章节的延时（ms）" FontSize="12" Foreground="{DynamicResource SukiLowText}"/></StackPanel>
+                            <TextBox Grid.Column="1" Text="{Binding Settings.ChapterJumpInterval}" TextAlignment="Center"/>
+                        </Grid>
                     </StackPanel>
-                    <ToggleButton Classes="Switch" DockPanel.Dock="Right" IsChecked="{Binding Settings.TryFinishVideo}" HorizontalAlignment="Right"/>
-                </DockPanel>
-            </suki:GlassCard>
-            <suki:GlassCard CornerRadius="0,0,25,25">
-                <DockPanel HorizontalSpacing="10">
-                    <icons:MaterialIcon DockPanel.Dock="Left"   Kind="Timer" Height="20" Width="20"
-                                        Foreground="{DynamicResource SukiLowText}"/>
-                    <StackPanel>
-                        <TextBlock Text="播放倍速" FontSize="16" FontWeight="Bold"/>
-                        <TextBlock Text="播放视频的倍速" FontSize="16" Foreground="{DynamicResource SukiLowText}" />
+                </suki:GlassCard>
+            </Grid>
+
+            <suki:GlassCard CornerRadius="14">
+                <Grid ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="22">
+                    <StackPanel Orientation="Horizontal" Spacing="10">
+                        <icons:MaterialIcon Kind="Pencil" Width="22" Height="22" Foreground="{DynamicResource SukiPrimaryColor}"/>
+                        <StackPanel><TextBlock Text="答题与文字识别" FontSize="16" FontWeight="SemiBold"/><TextBlock Text="需要先在设置中配置 AI 模型" FontSize="12" Foreground="{DynamicResource SukiLowText}"/></StackPanel>
                     </StackPanel>
-                    <TextBox DockPanel.Dock="Right" HorizontalAlignment="Right" Text="{Binding Settings.VideoPlayRate}" Width="100" TextAlignment="Center"/>
-                </DockPanel>
-            </suki:GlassCard>
-            <!--  test  -->
-            
-            <suki:GlassCard CornerRadius="25,25,0,0" Margin="0,20,0,0">
-                <suki:GroupBox >
-                    <suki:GroupBox.Header>
-                        <StackPanel Spacing="10" Orientation="Horizontal" Height="40">
-                            <icons:MaterialIcon Height="20" Width="20" Kind="BookOpen" 
-                                                Foreground="{DynamicResource SukiPrimaryColor}"/>
-                            <TextBlock Text="章节测试" FontSize="16" VerticalAlignment="Center" FontWeight="Bold"/>
-                        </StackPanel>
-                    </suki:GroupBox.Header>
-                    <DockPanel HorizontalSpacing="10">
-                        <icons:MaterialIcon DockPanel.Dock="Left"   Kind="Pencil" Height="20" Width="20"
-                                            Foreground="{DynamicResource SukiLowText}"/>
-                        <StackPanel >
-                            <TextBlock Text="自动答题" FontSize="16" FontWeight="Bold"/>
-                            <TextBlock Text="使用自动答题功能(先设置AI)" FontSize="16" Foreground="{DynamicResource SukiLowText}" />
-                        </StackPanel>
-                        <ToggleButton Classes="Switch" IsChecked="{Binding Settings.AutoTest}" DockPanel.Dock="Right" HorizontalAlignment="Right"/>
-                         </DockPanel>
-                </suki:GroupBox>
-            </suki:GlassCard>
-            <suki:GlassCard CornerRadius="0,0,0,0">
-                <DockPanel HorizontalSpacing="10">
-                    <icons:MaterialIcon DockPanel.Dock="Left"   Kind="Camera" Height="20" Width="20"
-                                        Foreground="{DynamicResource SukiLowText}"/>
-                    <StackPanel>
-                        <TextBlock Text="AI识文字别" FontSize="16" FontWeight="Bold"/>
-                        <TextBlock Text="调用模型进行文字识别，需配置可识别图像的模型" FontSize="16" Foreground="{DynamicResource SukiLowText}" />
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                        <TextBlock Text="自动答题" VerticalAlignment="Center"/><ToggleButton Classes="Switch" IsChecked="{Binding Settings.AutoTest}"/>
                     </StackPanel>
-                    <ToggleButton Classes="Switch" IsChecked="{Binding Settings.UsedAiToOcr}" DockPanel.Dock="Right" HorizontalAlignment="Right"/>
-                </DockPanel>
-            </suki:GlassCard>
-            <suki:GlassCard CornerRadius="0,0,25,25">
-                <DockPanel HorizontalSpacing="10">
-                    <icons:MaterialIcon DockPanel.Dock="Left"   Kind="RobotLove" Height="20" Width="20"
-                                        Foreground="{DynamicResource SukiLowText}"/>
-                    <StackPanel>
-                        <TextBlock Text="加载OCR模型" FontSize="16" FontWeight="Bold"/>
-                        <TextBlock Text="下载/加载离线模型用于OCR文字识别" FontSize="16" Foreground="{DynamicResource SukiLowText}" />
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                        <TextBlock Text="AI 识图" VerticalAlignment="Center"/><ToggleButton Classes="Switch" IsChecked="{Binding Settings.UsedAiToOcr}"/>
                     </StackPanel>
-                    <Button p:ButtonExtensions.Icon="{icons:MaterialIconExt Kind=Download}" p:ButtonExtensions.ShowProgress="{Binding IsDownloading}"
-                            Classes="Flat" DockPanel.Dock="Right" HorizontalAlignment="Right" Content="加载" Command="{Binding UpdateOCRModel}"/>
-                </DockPanel>
+                    <Button Grid.Column="3" Classes="Flat" Content="加载 Pix2Text" Command="{Binding InitializePix2TextCommand}"
+                            p:ButtonExtensions.Icon="{icons:MaterialIconExt Kind=Download}"
+                            p:ButtonExtensions.ShowProgress="{Binding IsDownloading}"/>
+                </Grid>
             </suki:GlassCard>
         </StackPanel>
     </ScrollViewer>

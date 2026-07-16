@@ -9,7 +9,6 @@ using Material.Icons;
 using Siua.Common;
 using Siua.Interfaces;
 using Siua.Views.Pages;
-using Siua.Views.Windows;
 using SukiUI.Dialogs;
 
 namespace Siua.ViewModels;
@@ -23,27 +22,36 @@ public partial class SettingsViewModel : PageBase
     [ObservableProperty]private string _currentBrowser;
     [ObservableProperty]
     private  GlobalSettings _settings;
-    private readonly IShowWindowManager _showWindowManager;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsOverview))]
+    [NotifyPropertyChangedFor(nameof(IsSubPageOpen))]
+    private ObservableObject? _activeSubPage;
+
+    public bool IsOverview => ActiveSubPage is null;
+    public bool IsSubPageOpen => ActiveSubPage is not null;
+    public AiSettingsViewModel AiSettings { get; }
+    public CourseEditViewModel CourseEditor { get; }
     
-    public SettingsViewModel(GlobalSettings globalSettings,IShowWindowManager showWindowManager) : base("设置", MaterialIconKind.Settings, 1000)
+    public SettingsViewModel(GlobalSettings globalSettings, AiSettingsViewModel aiSettings,
+        CourseEditViewModel courseEditor) : base("设置", MaterialIconKind.Settings, 1000)
     {
         _settings = globalSettings;
-        _showWindowManager = showWindowManager;
+        AiSettings = aiSettings;
+        CourseEditor = courseEditor;
+        AiSettings.RequestClose += CloseSubPage;
+        CourseEditor.RequestClose += CloseSubPage;
         CurrentBrowser = Settings.BrowserCannel;
     }
-    [RelayCommand]
     partial void OnCurrentBrowserChanged(string value)
     {
         Settings.BrowserCannel = value;
     }
 
-    public  async Task ShowAiSetting()
-    {
-        await _showWindowManager.ShowDialogAsync<AiSettingsView,AiSettingsViewModel>();
-    }
     [RelayCommand]
-    public async Task ShowCourseList()
-    {
-        await _showWindowManager.ShowDialogAsync<CourseEditView, CourseEditViewModel>();
-    }
+    private void ShowAiSetting() => ActiveSubPage = AiSettings;
+
+    [RelayCommand]
+    private void ShowCourseList() => ActiveSubPage = CourseEditor;
+
+    private void CloseSubPage() => ActiveSubPage = null;
 }

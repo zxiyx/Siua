@@ -9,7 +9,6 @@ using Microsoft.Extensions.DependencyInjection;
 using Siua.Interfaces;
 using Siua.Services;
 using Siua.Views.Pages;
-using Siua.Views.Windows;
 using SukiUI.Dialogs;
 using SukiUI.Toasts;
 
@@ -32,6 +31,7 @@ public  partial class App : Application
             var provider = ConfigureServices(services);
             DataTemplates.Add(new ViewLocator(views));
             desktop.MainWindow = views.CreateView<MainViewModel>(provider) as Window;
+            desktop.Exit += (_, _) => provider.Dispose();
         }
         else if (ApplicationLifetime is ISingleViewApplicationLifetime singleView)
         {
@@ -68,7 +68,7 @@ public  partial class App : Application
             gs.LoadFromJson();
             return gs;
         });
-        services.AddSingleton<PaddleOcrService>();
+        services.AddSingleton<Pix2TextService>();
         services.AddSingleton<AiControlService>();
         services.AddSingleton<ILogService,LogService>();
         services.AddSingleton<ICoreService,CoreService>();

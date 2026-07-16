@@ -11,28 +11,55 @@ namespace Siua.ViewModels;
 public partial class CourseEditViewModel:ViewModelBase
 {
     public Action? RequestClose;
-    [ObservableProperty]private string _selectedCourse;
-    [ObservableProperty]private string _newCourse;
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(RemoveCourseCommand))]
+    private string? _selectedCourse;
+
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(AddCourseCommand))]
+    private string? _newCourse;
     [ObservableProperty] private bool _isSaving;
-     [ObservableProperty]
-     private  GlobalSettings _settings;
+    [ObservableProperty]
+    private  GlobalSettings _settings;
     
     public CourseEditViewModel(GlobalSettings globalSettings)
     {
         _settings = globalSettings;
     }
-    partial void OnSelectedCourseChanged(string value)
+    partial void OnSelectedCourseChanged(string? value)
     {
-         NewCourse = value;
+        if (value is not null)
+            NewCourse = value;
     }
-    [RelayCommand]
+
+    private bool CanAddCourse()
+    {
+        var course = NewCourse?.Trim();
+        return !string.IsNullOrWhiteSpace(course) && !Settings.Courses.Contains(course);
+    }
+
+    [RelayCommand(CanExecute = nameof(CanAddCourse))]
     public void AddCourse()
     {
-        Settings.Courses.Add(NewCourse);
+        var course = NewCourse!.Trim();
+        Settings.Courses.Add(course);
+        SelectedCourse = course;
+        NewCourse = string.Empty;
     }
-    [RelayCommand]
-    public void SubCourse()
+
+    private bool CanRemoveCourse() => SelectedCourse is not null;
+
+    [RelayCommand(CanExecute = nameof(CanRemoveCourse))]
+    public void RemoveCourse()
     {
-        Settings.Courses.Remove(NewCourse);
+        if (SelectedCourse is null)
+            return;
+
+        Settings.Courses.Remove(SelectedCourse);
+        SelectedCourse = null;
+        NewCourse = string.Empty;
     }
+
+    [RelayCommand]
+    private void Close() => RequestClose?.Invoke();
 }

@@ -1,180 +1,185 @@
 ﻿using System;
+using System.Diagnostics;
+using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Playwright;
 
 namespace Siua.Core;
 
-public class Video
+public sealed class Video
 {
-    private IFrame frame;
-    private ILocator handle;
-    private ILocator videoElement;
+    private const string IncompleteIconSelector =
+        "div.ans-job-icon.ans-job-icon-clear[aria-label='任务点未完成']";
+    private const string EndedClass = "vjs-ended";
+    private const string PausedClass = "vjs-paused";
+    private const string StartedClass = "vjs-has-started";
 
+    private readonly ILocator _container;
     private readonly GlobalSettings _settings;
-    public Video(ILocator data, GlobalSettings settings)
+    private ILocator? _player;
+    private ILocator? _videoElement;
+    private ILocator? _playButton;
+    private ILocator? _bigPlayButton;
+
+    public Video(ILocator container, GlobalSettings settings)
     {
-        handle = data;
+        _container = container;
         _settings = settings;
     }
 
-    public async Task<bool> IsCompleted()
+    public async Task<bool> IsCompletedAsync()
     {
         try
         {
-            var icon = handle.Locator("div.ans-job-icon.ans-job-icon-clear[aria-label='任务点未完成']");
-            return await icon.CountAsync() == 0;
+            return await _container.Locator(IncompleteIconSelector).CountAsync() == 0;
         }
-        catch
+        catch (PlaywrightException)
         {
             return true;
         }
     }
-    
 
-    public async Task ControlVideos()
+    public async Task InitializeAsync()
     {
-        var iframeLocator = handle.Locator("iframe").First;
+        var iframeLocator = _container.Locator("iframe").First;
         await iframeLocator.WaitForAsync();
-        var iframeElement = await iframeLocator.ElementHandleAsync();
-        frame = await iframeElement!.ContentFrameAsync();
+        var iframeElement = await iframeLocator.ElementHandleAsync()
+            ?? throw new PlaywrightException("无法获取视频 iframe 元素。");
+        var frame = await iframeElement.ContentFrameAsync()
+            ?? throw new PlaywrightException("无法进入视频 iframe。");
+        _player = frame.Locator("#video").First;
+        _videoElement = frame.Locator("#reader video.vjs-tech").First;
+        _playButton = frame.Locator(".vjs-play-control").First;
+        _bigPlayButton = frame.Locator(".vjs-big-play-button").First;
 
-        var div = frame!.Locator("#reader");
-        if (await div.CountAsync() > 0)
-        {
-            videoElement = div.Locator("video.vjs-tech").First;
-        }
+        await _player.WaitForAsync();
+        await _videoElement.WaitForAsync();
     }
 
-   
-    public async Task Play()
+    public async Task PlayAsync(CancellationToken cancellationToken = default)
     {
-        await videoElement.WaitForAsync();
-        if (videoElement!=null)
+        cancellationToken.ThrowIfCancellationRequested();
+        var playerClass = await GetPlayerClassAsync();
+
+        if (!HasClass(playerClass, StartedClass) &&
+            await IsUsableAsync(GetBigPlayButton()))
         {
-            await videoElement.EvaluateAsync($@"
-    (function() {{
-        window._videoCompleted = false;
-        const VIDEO_PAUSED_CLASS = 'vjs-paused';
-        const VIDEO_ENDED_CLASS = 'vjs-ended';
-        const VIDEO_STARTED_CLASS = 'vjs-has-started';
-        
-        const videoDiv = document.getElementById('video');
-        const playBtn = document.querySelector('.vjs-play-control');
-        const bigPlayBtn = document.querySelector('.vjs-big-play-button');
-        
-        if (!videoDiv || !playBtn) {{
-            console.log('未找到视频元素');
-            return;
-        }}
-        if (!videoDiv.classList.contains(VIDEO_STARTED_CLASS) && bigPlayBtn) {{
-            bigPlayBtn.click();
-        }}
-        
-        const video = videoDiv.querySelector('video');
-        if (video) {{
-            video.playbackRate = {_settings.VideoPlayRate};
-            video.muted = {_settings.IsMuted.ToString().ToLower()};
-            Object.defineProperty(video, 'playbackRate', {{
-                get: () => {_settings.VideoPlayRate},
-                set: () => {{}},
-                configurable: true
-            }});
-        }}
-        let pauseFreeze = false;
-        const observer = new MutationObserver(() => {{
-            // 视频结束
-            if (videoDiv.classList.contains(VIDEO_ENDED_CLASS)) {{
-                console.log('视频播放结束');
-                window._videoCompleted = true;
-                observer.disconnect();
-                return;
-            }}
-            // 视频暂停
-            if (videoDiv.classList.contains(VIDEO_PAUSED_CLASS) && !pauseFreeze) {{
-                console.log('检测到暂停，自动恢复');
-                
-                // 延迟确认，避免误判
-                setTimeout(() => {{
-                    if (videoDiv.classList.contains(VIDEO_PAUSED_CLASS)) {{
-                        if (playBtn && !videoDiv.classList.contains(VIDEO_ENDED_CLASS)) {{
-                            playBtn.click();
-                            console.log('已点击播放按钮');
-                        }}
-                        
-                        // JS 强制播放
-                        if (video && video.paused) {{
-                            video.play().catch(() => {{}});
-                        }}
-                    }}
-                }}, 400);
-            }}
-        }});
-        observer.observe(videoDiv, {{ attributes: true, attributeFilter: ['class'] }});
-        if (videoDiv.classList.contains(VIDEO_PAUSED_CLASS)) {{
-            playBtn?.click();
-        }}
-    }})();
-    ");
+            await GetBigPlayButton().ClickAsync();
+        }
+
+        await ApplyPlaybackSettingsAsync();
+        if (HasClass(await GetPlayerClassAsync(), PausedClass))
+        {
+            await ResumeAsync();
         }
     }
 
-    public async Task<bool> TryFinishVideo()
+    public async Task<bool> TryFinishAsync(CancellationToken cancellationToken = default)
     {
-        return await handle.EvaluateAsync<bool>(@"
-(async function() {
-    try {
-        const video = document.querySelector('video.vjs-tech');
-        const player = window.videojs?.getPlayer('video');
-        if (!video) return false;
-        if (!video.duration || isNaN(video.duration)) {
-            await new Promise(r => video.addEventListener('loadedmetadata', r, { once: true }));
+        var video = GetVideoElement();
+        var duration = await WaitForDurationAsync(video, cancellationToken);
+        if (duration is null)
+        {
+            return false;
         }
-        const targetTime = video.duration * 0.999;
-        if (player) {
-            player.currentTime(targetTime);
-            player.pause();
-            player.trigger('ended');
-        } else {
-            video.currentTime = targetTime;
-            video.pause();
-        }
-        await new Promise(r => setTimeout(r, 500));
-        return (video.currentTime / video.duration) >= 0.99;
-    } catch {
-        return false;
+        await video.EvaluateAsync("(element, time) => element.currentTime = time", duration.Value * 0.999);
+        await ApplyPlaybackSettingsAsync();
+        await ResumeAsync();
+        await Task.Delay(500, cancellationToken);
+
+        var currentTime = await video.EvaluateAsync<double>("element => element.currentTime");
+        return currentTime / duration.Value >= 0.99;
     }
-})();
-");
-    }
-    public async Task<bool> WaitForVideoEnd(int timeout = 3600000)
+
+    public async Task<bool> WaitForEndAsync(
+        int timeout = 3_600_000,
+        CancellationToken cancellationToken = default)
     {
-        try
+        var timer = Stopwatch.StartNew();
+        while (timer.ElapsedMilliseconds < timeout)
         {
-            await frame.WaitForFunctionAsync(
-                "() => window._videoCompleted === true",
-                null,
-                new() { Timeout = timeout, PollingInterval = 1000 }
-            );
-            return true;
-        }
-        catch (TimeoutException)
-        {
-            try
+            cancellationToken.ThrowIfCancellationRequested();
+            var playerClass = await GetPlayerClassAsync();
+            if (HasClass(playerClass, EndedClass))
             {
-                var videoDiv = frame.Locator("#video");
-                if (await videoDiv.CountAsync() > 0)
-                {
-                    var classAttr = await videoDiv.First.GetAttributeAsync("class");
-                    if (classAttr?.Contains("vjs-ended") == true) return true;
-                }
+                return true;
             }
-            catch { /* 忽略 */ }
-            return false;
+            await ApplyPlaybackSettingsAsync();
+            if (HasClass(playerClass, PausedClass))
+            {
+                await ResumeAsync();
+            }
+
+            await Task.Delay(1000, cancellationToken);
         }
-        catch (Exception ex)
+
+        return HasClass(await GetPlayerClassAsync(), EndedClass);
+    }
+
+    private async Task ResumeAsync()
+    {
+        if (!HasClass(await GetPlayerClassAsync(), PausedClass))
         {
-            Console.WriteLine($"[Video] WaitForVideoEnd 异常：{ex.Message}");
-            return false;
+            return;
+        }
+
+        var playButton = GetPlayButton();
+        if (await IsUsableAsync(playButton))
+        {
+            await playButton.ClickAsync(new LocatorClickOptions { Timeout = 3000 });
         }
     }
+
+    private async Task ApplyPlaybackSettingsAsync()
+    {
+        await GetVideoElement().EvaluateAsync(
+            "(element, options) => { element.playbackRate = options.rate; element.muted = options.muted; }",
+            new { rate = _settings.VideoPlayRate, muted = _settings.IsMuted });
+    }
+
+    private static async Task<double?> WaitForDurationAsync(
+        ILocator video,
+        CancellationToken cancellationToken)
+    {
+        for (var attempt = 0; attempt < 20; attempt++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var duration = await video.EvaluateAsync<double>("element => element.duration");
+            if (double.IsFinite(duration) && duration > 0)
+            {
+                return duration;
+            }
+
+            await Task.Delay(250, cancellationToken);
+        }
+
+        return null;
+    }
+
+    private async Task<string> GetPlayerClassAsync()
+    {
+        return await GetPlayer().GetAttributeAsync("class") ?? string.Empty;
+    }
+
+    private static bool HasClass(string classNames, string expected)
+    {
+        return classNames.Contains(expected, StringComparison.Ordinal);
+    }
+
+    private static async Task<bool> IsUsableAsync(ILocator locator)
+    {
+        return await locator.CountAsync() > 0 && await locator.IsVisibleAsync();
+    }
+
+    private ILocator GetPlayer() =>
+        _player ?? throw new InvalidOperationException("视频尚未初始化。");
+
+    private ILocator GetVideoElement() =>
+        _videoElement ?? throw new InvalidOperationException("视频尚未初始化。");
+
+    private ILocator GetPlayButton() =>
+        _playButton ?? throw new InvalidOperationException("视频尚未初始化。");
+
+    private ILocator GetBigPlayButton() =>
+        _bigPlayButton ?? throw new InvalidOperationException("视频尚未初始化。");
 }

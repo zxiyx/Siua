@@ -38,6 +38,7 @@ public partial class AiSettingsViewModel:ObservableObject
     {
         if (value == "自定义")
         {
+            Settings.CurrentAi.AiProvider = value;
             OnPropertyChanged(nameof(IsCustom));
             return;
         }
@@ -48,15 +49,18 @@ public partial class AiSettingsViewModel:ObservableObject
         }
         OnPropertyChanged(nameof(IsCustom));
     }
+
+    [RelayCommand]
+    private void Close() => RequestClose?.Invoke();
 }
 public class ProviderToBoolConverter : IValueConverter
 {
-    public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+    public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
     {
         return value is string selected && parameter is string current && selected == current;
     }
 
-    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+    public object? ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
     {
         if (value is bool isChecked && isChecked && parameter is string provider)
             return provider;

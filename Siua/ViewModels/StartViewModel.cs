@@ -1,5 +1,8 @@
 ﻿using System;
+using System.Globalization;
 using System.Threading.Tasks;
+using Avalonia.Data;
+using Avalonia.Data.Converters;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Material.Icons;
@@ -11,45 +14,82 @@ namespace Siua.ViewModels;
 
 public partial class StartViewModel :PageBase
 {
+    [ObservableProperty] private string _selectedPlatform;
     [ObservableProperty] private bool _isRunning = false;
     [ObservableProperty] private bool _isDownloading = false;
     private bool _mainLoopRunning = false;
     [ObservableProperty]
     private GlobalSettings _settings;
     private readonly ICoreService _coreService;
-    private readonly PaddleOcrService _paddleOcrService;
-    public StartViewModel(GlobalSettings globalSettings,ICoreService coreService,PaddleOcrService paddleOcrService) : base("开始", MaterialIconKind.Application, 0)
+    private readonly Pix2TextService _pix2TextService;
+    public bool IsSelectedPlatformSupported => SelectedPlatform == "学习通";
+    public string PlatformAvailabilityText => IsSelectedPlatformSupported ? "已适配 · 可以开始" : "适配中 · 敬请期待";
+    public StartViewModel(GlobalSettings globalSettings,ICoreService coreService,Pix2TextService pix2TextService) : base("开始", MaterialIconKind.Application, 0)
     {
         _settings = globalSettings;
+        _selectedPlatform = string.IsNullOrWhiteSpace(globalSettings.CurrentPlatform)
+            ? "学习通"
+            : globalSettings.CurrentPlatform;
         _coreService = coreService;
-        _paddleOcrService = paddleOcrService;
+        _pix2TextService = pix2TextService;
     }
-    [RelayCommand]
+    partial void OnSelectedPlatformChanged(string value)
+    {
+        Settings.CurrentPlatform = value;
+        OnPropertyChanged(nameof(IsSelectedPlatformSupported));
+        OnPropertyChanged(nameof(PlatformAvailabilityText));
+    }
+
+    [RelayCommand(AllowConcurrentExecutions = true)]
     public async Task StartRunning()
     {
-        _mainLoopRunning = !_mainLoopRunning;
+        if (!IsSelectedPlatformSupported)
+            return;
+
         if (IsRunning)
         {
-            IsRunning = !IsRunning;
+            _mainLoopRunning = false;
             _coreService.Dispose();
+            IsRunning = false;
             return;
         }
+
+        _mainLoopRunning = true;
         IsRunning = true;
-        await _coreService.LoadPlaywright();
-        while (_mainLoopRunning)
+        try
         {
-            await _coreService.ParsePage();
+            if (!await _coreService.LoadPlaywright())
+                return;
+
+            while (_mainLoopRunning &&
+                   _coreService.IsSessionActive &&
+                   await _coreService.ParsePage())
+            {
+            }
         }
-        _coreService.StopLoginHeartbeat();
-        IsRunning = false;
+        finally
+        {
+            _mainLoopRunning = false;
+            _coreService.Dispose();
+            IsRunning = false;
+        }
     }
     [RelayCommand]
-    public async Task UpdateOCRModel()
+    public async Task InitializePix2Text()
     {
         IsDownloading = true;
-        await _paddleOcrService.DownlLoadModel();
+        await _pix2TextService.EnsureReadyAsync();
         IsDownloading = false;
     }
 
     
+}
+
+public class StringEqualsConverter : IValueConverter
+{
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+        => value is string selected && parameter is string current && selected == current;
+
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
+        => value is true && parameter is string current ? current : BindingOperations.DoNothing;
 }

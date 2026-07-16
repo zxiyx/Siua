@@ -62,9 +62,17 @@
         <DependentUpon>MainView.axaml</DependentUpon>
         <SubType>Code</SubType>
       </Compile>
+      <Compile Update="Views\Pages\AiSettingsView.axaml.cs">
+        <DependentUpon>AiSettingsView.axaml</DependentUpon>
+        <SubType>Code</SubType>
+      </Compile>
+      <Compile Update="Views\Pages\CourseEditView.axaml.cs">
+        <DependentUpon>CourseEditView.axaml</DependentUpon>
+        <SubType>Code</SubType>
+      </Compile>
     </ItemGroup>
 
     <ItemGroup>
-      <Folder Include="Core\ocr\" />
+      <Folder Include="Core\zhs\" />
     </ItemGroup>
 </Project>
