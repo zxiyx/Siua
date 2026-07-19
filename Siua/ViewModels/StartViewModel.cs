@@ -21,7 +21,16 @@ public partial class StartViewModel :PageBase
 {
     [ObservableProperty] private string _selectedPlatform;
     [ObservableProperty] private bool _isRunning = false;
-    [ObservableProperty] private bool _isDownloading = false;
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(InstallPix2TextCommand))]
+    [NotifyCanExecuteChangedFor(nameof(StartPix2TextCommand))]
+    [NotifyCanExecuteChangedFor(nameof(StopPix2TextCommand))]
+    private bool _isInstallingPix2Text;
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(InstallPix2TextCommand))]
+    [NotifyCanExecuteChangedFor(nameof(StartPix2TextCommand))]
+    [NotifyCanExecuteChangedFor(nameof(StopPix2TextCommand))]
+    private bool _isStartingPix2Text;
     private bool _mainLoopRunning = false;
     [ObservableProperty]
     private GlobalSettings _settings;
@@ -124,19 +133,38 @@ public partial class StartViewModel :PageBase
             IsRunning = false;
         }
     }
-    [RelayCommand]
-    public async Task InitializePix2Text()
+    private bool CanManagePix2Text() => !IsInstallingPix2Text && !IsStartingPix2Text;
+
+    [RelayCommand(CanExecute = nameof(CanManagePix2Text))]
+    public async Task InstallPix2Text()
     {
-        IsDownloading = true;
+        IsInstallingPix2Text = true;
+        try
+        {
+            await _pix2TextService.InstallAsync();
+        }
+        finally
+        {
+            IsInstallingPix2Text = false;
+        }
+    }
+
+    [RelayCommand(CanExecute = nameof(CanManagePix2Text))]
+    public async Task StartPix2Text()
+    {
+        IsStartingPix2Text = true;
         try
         {
             await _pix2TextService.EnsureReadyAsync();
         }
         finally
         {
-            IsDownloading = false;
+            IsStartingPix2Text = false;
         }
     }
+
+    [RelayCommand(CanExecute = nameof(CanManagePix2Text))]
+    public async Task StopPix2Text() => await _pix2TextService.StopAsync();
 
     private void OnCoursesChanged(object? sender, NotifyCollectionChangedEventArgs eventArgs)
     {

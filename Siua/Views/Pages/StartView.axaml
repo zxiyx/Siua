@@ -206,13 +206,22 @@
                     <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
                         <StackPanel>
                             <TextBlock Text="Pix2Text" FontWeight="SemiBold"/>
-                            <TextBlock Text="启动并连接本地文字与数学公式识别服务"
+                            <TextBlock Text="首次使用先安装运行环境，之后启动本地文字与数学公式识别服务"
                                        FontSize="12" Foreground="{DynamicResource SukiLowText}"/>
                         </StackPanel>
-                        <Button Grid.Column="1" Classes="Flat" Height="34" MinWidth="128"
-                                Content="加载 Pix2Text" Command="{Binding InitializePix2TextCommand}"
-                                p:ButtonExtensions.Icon="{icons:MaterialIconExt Kind=Download}"
-                                p:ButtonExtensions.ShowProgress="{Binding IsDownloading}"/>
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
+                            <Button Classes="Flat" Height="34" MinWidth="100"
+                                    Content="安装" Command="{Binding InstallPix2TextCommand}"
+                                    p:ButtonExtensions.Icon="{icons:MaterialIconExt Kind=Download}"
+                                    p:ButtonExtensions.ShowProgress="{Binding IsInstallingPix2Text}"/>
+                            <Button Classes="Flat" Height="34" MinWidth="100"
+                                    Content="启动" Command="{Binding StartPix2TextCommand}"
+                                    p:ButtonExtensions.Icon="{icons:MaterialIconExt Kind=Play}"
+                                    p:ButtonExtensions.ShowProgress="{Binding IsStartingPix2Text}"/>
+                            <Button Classes="Flat" Height="34" MinWidth="100"
+                                    Content="停止" Command="{Binding StopPix2TextCommand}"
+                                    p:ButtonExtensions.Icon="{icons:MaterialIconExt Kind=Stop}"/>
+                        </StackPanel>
                     </Grid>
                 </StackPanel>
             </suki:GlassCard>
