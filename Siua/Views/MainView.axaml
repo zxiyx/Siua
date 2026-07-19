@@ -5,7 +5,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:suki="clr-namespace:SukiUI.Controls;assembly=SukiUI"
         xmlns:icons="clr-namespace:Material.Icons.Avalonia;assembly=Material.Icons.Avalonia"
-        mc:Ignorable="d" Width="1000" Height="700"
+        mc:Ignorable="d" Width="1030" Height="720"
         x:Class="Siua.Views.MainView"
         x:DataType="vm:MainViewModel" Title="Siua - 多平台学习助手">
         <suki:SukiWindow.Hosts>
