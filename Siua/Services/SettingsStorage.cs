@@ -14,7 +14,7 @@ namespace Siua.Services;
 internal sealed class SettingsStorage
 {
     private const string SettingsFileName = "settings.json";
-    private const string ApplicationDirectoryName = "NSiua";
+    private const string ApplicationDirectoryName = "Siua";
     private readonly SemaphoreSlim _writeLock = new(1, 1);
 
     public SettingsStorage(string? storageDirectory)
