@@ -8,6 +8,7 @@ using Siua.Interfaces;
 
 namespace Siua.Services;
 
+/// <summary>负责调用 AI 模型完成 OCR 与答案分析。</summary>
 public class AiControlService
 {
     private readonly GlobalSettings _globalSettings;

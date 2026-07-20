@@ -5,10 +5,7 @@ using System.Text.RegularExpressions;
 
 namespace Siua.Core;
 
-/// <summary>
-/// 两个平台共用的 AI 答案匹配规则。优先识别规范的 A-H 答案，
-/// 没有明确选项字母时才回退匹配选项全文。
-/// </summary>
+/// <summary>提供学习平台共用的 AI 答案匹配规则。</summary>
 internal static class AnswerMatcher
 {
     private static readonly Regex MarkerPattern = new(

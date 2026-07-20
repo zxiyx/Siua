@@ -9,6 +9,7 @@ public enum LogLevel
     Browser
 }
 
+/// <summary>表示一条带来源和等级的运行日志。</summary>
 public sealed class LogEntry
 {
     public DateTime Time { get; init; } = DateTime.Now;

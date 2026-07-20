@@ -6,6 +6,7 @@ using Microsoft.Playwright;
 
 namespace Siua.Core.Zhs;
 
+/// <summary>封装智慧树视频的播放、进度与完成检测。</summary>
 public sealed class ZhsVideo
 {
     private readonly ILocator _video;

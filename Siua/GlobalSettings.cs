@@ -14,6 +14,7 @@ using Siua.Services;
 
 namespace Siua;
 
+/// <summary>管理应用运行设置及其持久化状态。</summary>
 public partial class GlobalSettings : ObservableObject, IDisposable
 {
     private const int SaveDelayMilliseconds = 750;
@@ -109,7 +110,6 @@ public partial class GlobalSettings : ObservableObject, IDisposable
         CurrentAi.PropertyChanged -= HandleSettingsChanged;
         CancelScheduledSave();
 
-        // 确保防抖等待期间的最后一次修改也能在应用退出前落盘。
         Interlocked.Exchange(ref _isDisposed, 0);
         try
         {

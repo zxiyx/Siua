@@ -6,6 +6,7 @@ using Microsoft.Playwright;
 
 namespace Siua.Core.Xxt;
 
+/// <summary>封装学习通章节测试的题目加载与提交操作。</summary>
 public sealed class XxtChapterTest
 {
     private readonly ILocator _container;
@@ -82,6 +83,7 @@ public sealed class XxtChapterTest
     }
 }
 
+/// <summary>表示一道学习通题目及其可选答案。</summary>
 public sealed class XxtQuestion
 {
     private readonly ILocator _container;

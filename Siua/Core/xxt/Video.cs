@@ -6,6 +6,7 @@ using Microsoft.Playwright;
 
 namespace Siua.Core.Xxt;
 
+/// <summary>封装学习通视频任务的播放与完成检测。</summary>
 public sealed class XxtVideo
 {
     private const string IncompleteIconSelector =

@@ -4,6 +4,7 @@ using Newtonsoft.Json;
 
 namespace Siua.Common;
 
+/// <summary>保存应用设置的持久化快照。</summary>
 internal sealed class SettingsSnapshot
 {
     public string CurrentPlatform { get; set; } = "学习通";
@@ -22,12 +23,12 @@ internal sealed class SettingsSnapshot
     public bool AutoTest { get; set; }
     public Dictionary<string, string[]> CoursesByPlatform { get; set; } = [];
 
-    // 兼容 1.0.8 及更早版本的单一课程列表，迁移后不再写入。
     [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
     public string[]? Courses { get; set; }
     public AiSettingsSnapshot CurrentAi { get; set; } = new();
 }
 
+/// <summary>保存 AI 服务连接配置的持久化快照。</summary>
 internal sealed class AiSettingsSnapshot
 {
     public string? AiProvider { get; set; }
@@ -36,4 +37,5 @@ internal sealed class AiSettingsSnapshot
     public string? ApiKey { get; set; }
 }
 
+/// <summary>表示设置文件的读取结果。</summary>
 internal sealed record SettingsLoadResult(SettingsSnapshot? Snapshot, bool ShouldRewrite);

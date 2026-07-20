@@ -14,6 +14,7 @@ using SukiUI.Toasts;
 
 namespace Siua;
 
+/// <summary>负责应用启动、依赖注册与主窗口初始化。</summary>
 public  partial class App : Application
 {
     public override void Initialize()
@@ -40,8 +41,6 @@ public  partial class App : Application
             var views = ConfigureViews(services);
             var provider = ConfigureServices(services);
             DataTemplates.Add(new ViewLocator(views));
-            // Ideally, we want to create a MainView that host app content
-            // and use it for both IClassicDesktopStyleApplicationLifetime and ISingleViewApplicationLifetime
         }
 
         base.OnFrameworkInitializationCompleted();

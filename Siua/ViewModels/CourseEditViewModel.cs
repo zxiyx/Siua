@@ -12,6 +12,7 @@ using SukiUI.Toasts;
 
 namespace Siua.ViewModels;
 
+/// <summary>管理当前平台的课程地址列表。</summary>
 public partial class CourseEditViewModel:ViewModelBase
 {
     public Action? RequestClose;

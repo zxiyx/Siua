@@ -3,7 +3,10 @@ using System.Linq;
 
 namespace Siua.Services;
 
+/// <summary>描述一个 AI 服务商及其默认接口地址。</summary>
 public record AiProvider(string Provider, string Domain);
+
+/// <summary>提供内置 AI 服务商配置。</summary>
 public static class AiProviderService
 {
     public static readonly AiProvider[] Providers = new[]
@@ -15,11 +18,4 @@ public static class AiProviderService
         new AiProvider("豆包", "ark.cn-beijing.volces.com"),
     };
 
-    /*
-    public static AiProvider Get(string providerName) =>
-        Providers.FirstOrDefault(p => p.Provider.Equals(providerName, StringComparison.OrdinalIgnoreCase))
-        ?? throw new ArgumentException($"未找到提供商: {providerName}");
-    */
-    
-    
 }

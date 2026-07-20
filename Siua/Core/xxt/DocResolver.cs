@@ -4,6 +4,7 @@ using Microsoft.Playwright;
 
 namespace Siua.Core.Xxt;
 
+/// <summary>解析学习通页面中的文档任务。</summary>
 public sealed class XxtDocumentResolver
 {
 

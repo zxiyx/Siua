@@ -7,6 +7,7 @@ using Siua.Interfaces;
 
 namespace Siua.Services;
 
+/// <summary>负责显示应用窗口与对话内容。</summary>
 public class ShowWindowManager:IShowWindowManager
 {
     private readonly IServiceProvider _serviceProvider;

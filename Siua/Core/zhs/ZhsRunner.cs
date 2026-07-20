@@ -10,6 +10,7 @@ using Siua.Services;
 
 namespace Siua.Core.Zhs;
 
+/// <summary>组织智慧树课程任务的完整执行流程。</summary>
 public sealed class ZhsRunner
 {
     private const string LogSource = "Zhs";

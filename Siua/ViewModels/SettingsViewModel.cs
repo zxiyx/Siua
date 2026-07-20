@@ -8,6 +8,7 @@ using Siua.Common;
 
 namespace Siua.ViewModels;
 
+/// <summary>管理全局设置页面及其子页面导航。</summary>
 public partial class SettingsViewModel : PageBase
 {
     [ObservableProperty] private ObservableCollection<string> _browsers = new()

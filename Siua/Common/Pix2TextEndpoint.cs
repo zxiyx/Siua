@@ -3,6 +3,7 @@ using System.Net;
 
 namespace Siua.Common;
 
+/// <summary>负责验证并创建 Pix2Text 服务端点。</summary>
 public static class Pix2TextEndpoint
 {
     public static bool TryCreate(

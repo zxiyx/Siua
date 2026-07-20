@@ -3,6 +3,7 @@ using Siua.Common;
 using Siua.Interfaces;
 namespace Siua.Services;
 
+/// <summary>集中记录并分发应用运行日志。</summary>
 public class LogService:ILogService
 {
     public event Action<LogEntry>? OnLogAdded;

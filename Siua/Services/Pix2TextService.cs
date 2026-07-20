@@ -18,6 +18,7 @@ using Siua.Interfaces;
 
 namespace Siua.Services;
 
+/// <summary>管理 Pix2Text 的安装、运行和图像识别请求。</summary>
 public sealed class Pix2TextService : IDisposable
 {
     private const string LogSource = "Pix2Text";

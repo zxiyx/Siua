@@ -5,6 +5,7 @@ using Microsoft.Playwright;
 
 namespace Siua.Core.Zhs;
 
+/// <summary>解析智慧树课程页面中的章节目录。</summary>
 public sealed class ZhsPageResolver
 {
     private const string MainContainerSelector = "div.main-container";

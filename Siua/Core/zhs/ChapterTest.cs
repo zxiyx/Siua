@@ -7,10 +7,7 @@ using Microsoft.Playwright;
 
 namespace Siua.Core.Zhs;
 
-/// <summary>
-/// 智慧树章节测试页面控制器。负责打开独立测试页、读取当前题目、
-/// 切换题目、保存最后一题以及提交确认。
-/// </summary>
+/// <summary>控制智慧树章节测试页面及其提交流程。</summary>
 public sealed class ZhsChapterTest
 {
     private const string PartTitleSelector = "div.examPaper_partTit.mt20";
@@ -59,7 +56,6 @@ public sealed class ZhsChapterTest
         }
         catch (TimeoutException)
         {
-            // 兼容平台以后改成当前页面跳转的情况。
             examPage = coursePage;
         }
 
@@ -107,9 +103,6 @@ public sealed class ZhsChapterTest
         return question;
     }
 
-    /// <summary>
-    /// 点击“下一题”。最后一题按钮变成“保存”时点击保存并返回 false。
-    /// </summary>
     public async Task<bool> MoveNextOrSaveAsync(
         IPage examPage,
         string previousQuestionKey,
@@ -145,10 +138,6 @@ public sealed class ZhsChapterTest
         return true;
     }
 
-    /// <summary>
-    /// 点击“提交作业”，并在 Element UI 确认框中点击“确定/确认”。
-    /// 弹窗等待时间由设置中的 PopupTimeout 提供，与学习通保持一致。
-    /// </summary>
     public async Task SubmitAsync(
         IPage examPage,
         int popupTimeout,
@@ -243,6 +232,7 @@ public sealed class ZhsChapterTest
         Regex.Replace(value, @"\s+", " ").Trim();
 }
 
+/// <summary>表示一道智慧树题目及其答案选项。</summary>
 public sealed class ZhsQuestion
 {
     private readonly ILocator _container;
@@ -316,6 +306,7 @@ public sealed class ZhsQuestion
     }
 }
 
+/// <summary>封装智慧树题目的单个可选答案。</summary>
 public sealed class ZhsAnswerOption
 {
     private readonly ILocator _row;
@@ -343,7 +334,6 @@ public sealed class ZhsAnswerOption
         await clickTarget.ScrollIntoViewIfNeededAsync();
         await clickTarget.ClickAsync(new LocatorClickOptions { Timeout = 15_000 });
 
-        // 使用 Playwright 的表单 API 验证模拟点击是否真正选中。
         if (await _input.CountAsync() > 0 && !await _input.IsCheckedAsync())
         {
             await _input.CheckAsync(new LocatorCheckOptions

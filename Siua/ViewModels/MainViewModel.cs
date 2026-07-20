@@ -13,6 +13,7 @@ using SukiUI.Toasts;
 
 namespace Siua.ViewModels;
 
+/// <summary>管理主窗口导航、主题与页面状态。</summary>
 public partial class MainViewModel : ViewModelBase
 {
     public AvaloniaList<PageBase> Pages { get; set; }

@@ -8,6 +8,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace Siua;
 
+/// <summary>根据视图模型解析对应 Avalonia 视图。</summary>
 public class ViewLocator(MainViews views) : IDataTemplate
 {
     private readonly Dictionary<object, Control> _controlCache = [];

@@ -12,6 +12,7 @@ using Siua.Core.Zhs;
 
 namespace Siua.Services;
 
+/// <summary>协调浏览器生命周期与各学习平台任务。</summary>
 public sealed class CoreService : ICoreService
 {
     private const string PassportUrlFragment = "passport";
@@ -176,7 +177,6 @@ public sealed class CoreService : ICoreService
                 $"处理智慧树课程失败：{exception.Message}");
         }
 
-        // 智慧树适配器一次处理整门课程，结束外层逐页循环。
         return false;
     }
 
@@ -213,8 +213,6 @@ public sealed class CoreService : ICoreService
                 LogLevel.Error,
                 "Xxt",
                 $"处理学习通课程页面失败：{exception.Message}");
-            // Runner 已经自行跳过可恢复的任务点异常；到达这里表示当前页无法安全继续，
-            // 直接结束可避免外层循环反复处理同一页面。
             return false;
         }
     }

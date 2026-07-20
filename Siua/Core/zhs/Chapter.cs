@@ -8,6 +8,7 @@ using Microsoft.Playwright;
 
 namespace Siua.Core.Zhs;
 
+/// <summary>表示智慧树课程中的一个章节。</summary>
 public sealed class ZhsChapter
 {
     private const string SectionSelector =
@@ -69,6 +70,7 @@ public sealed class ZhsChapter
     }
 }
 
+/// <summary>表示智慧树章节中的一个视频小节。</summary>
 public sealed class ZhsSection
 {
     private static readonly Regex StrokeDashArrayPattern = new(

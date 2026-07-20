@@ -8,6 +8,7 @@ using Siua.Interfaces;
 
 namespace Siua.Core.Xxt;
 
+/// <summary>解析学习通课程页面中的各类任务点。</summary>
 public sealed class XxtPageResolver
 {
     private const string MainFrameSelector = "div.course_main > iframe";
@@ -147,11 +148,9 @@ public sealed class XxtPageResolver
         }
         catch (TimeoutException)
         {
-            // 章节提示并非每次都会出现。
         }
         catch (PlaywrightException)
         {
-            // 页面跳转可能会使提示元素失效，不影响后续章节处理。
         }
     }
 }

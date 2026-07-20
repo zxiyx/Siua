@@ -2,6 +2,7 @@ using System;
 
 namespace Siua.Common;
 
+/// <summary>提供学习平台标识与课程地址校验。</summary>
 public static class LearningPlatformCatalog
 {
     public const string XueXiTong = "学习通";

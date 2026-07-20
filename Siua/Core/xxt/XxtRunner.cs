@@ -10,6 +10,7 @@ using Siua.Services;
 
 namespace Siua.Core.Xxt;
 
+/// <summary>组织学习通课程任务的完整执行流程。</summary>
 public sealed class XxtRunner
 {
     private const string LogSource = "Xxt";

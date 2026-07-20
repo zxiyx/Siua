@@ -17,6 +17,7 @@ using Siua.Services;
 
 namespace Siua.ViewModels;
 
+/// <summary>管理课程启动、执行策略与 OCR 服务操作。</summary>
 public partial class StartViewModel :PageBase
 {
     [ObservableProperty] private string _selectedPlatform;
@@ -201,6 +202,7 @@ public partial class StartViewModel :PageBase
     }
 }
 
+/// <summary>将字符串相等关系转换为绑定布尔值。</summary>
 public class StringEqualsConverter : IValueConverter
 {
     public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)

@@ -10,6 +10,7 @@ using Siua.Interfaces;
 
 namespace Siua.ViewModels;
 
+/// <summary>管理运行日志的展示与筛选状态。</summary>
 public partial class LogViewModel :PageBase
 {
     

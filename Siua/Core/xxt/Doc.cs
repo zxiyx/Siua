@@ -5,6 +5,7 @@ using Microsoft.Playwright;
 
 namespace Siua.Core.Xxt;
 
+/// <summary>封装学习通文档任务及其完成操作。</summary>
 public sealed class XxtDocument
 {
     private readonly IFrame _frame;

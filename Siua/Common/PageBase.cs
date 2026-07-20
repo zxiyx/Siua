@@ -4,6 +4,7 @@ using Material.Icons;
 
 namespace Siua.Common;
 
+/// <summary>定义导航页面视图模型的公共信息。</summary>
 public abstract partial class PageBase(string displayName, MaterialIconKind icon,int index = 0) : ObservableValidator
 {
     [ObservableProperty] private string _displayName = displayName;

@@ -7,6 +7,7 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Siua.Common;
 
+/// <summary>维护视图模型与视图类型的映射关系。</summary>
 public class MainViews
 {
     private readonly Dictionary<Type, Type> _vmToViewMap = [];

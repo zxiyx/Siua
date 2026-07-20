@@ -5,6 +5,7 @@ using Avalonia.Media;
 
 namespace Siua.Common;
 
+/// <summary>将日志等级转换为界面显示颜色。</summary>
 public class LogLevelToColorConverter : IValueConverter
 {
     public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
