@@ -6,11 +6,11 @@ using Microsoft.Playwright;
 
 namespace Siua.Core.Zhs;
 
-public sealed class Video
+public sealed class ZhsVideo
 {
     private readonly ILocator _video;
 
-    public Video(ILocator video)
+    public ZhsVideo(ILocator video)
     {
         _video = video;
     }
@@ -75,26 +75,53 @@ public sealed class Video
             """,
             new { rate = playbackRate, muted, resume });
 
-    private Task<bool> HasEndedAsync() =>
-        _video.EvaluateAsync<bool>(
-            """
-            video => video.ended ||
-                (Number.isFinite(video.duration) && video.duration > 0 &&
-                 video.currentTime >= video.duration - 0.5)
-            """);
+    private async Task<bool> HasEndedAsync()
+    {
+        if (await GetVideoPropertyAsync<bool>("ended") is true)
+            return true;
+
+        var duration = await GetVideoPropertyAsync<double>("duration");
+        var currentTime = await GetVideoPropertyAsync<double>("currentTime");
+        return duration is > 0 &&
+               double.IsFinite(duration.Value) &&
+               currentTime is not null &&
+               currentTime.Value >= duration.Value - 0.5;
+    }
 
     private async Task<double?> WaitForDurationAsync(CancellationToken cancellationToken)
     {
         for (var attempt = 0; attempt < 20; attempt++)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var duration = await _video.EvaluateAsync<double>("video => video.duration");
-            if (double.IsFinite(duration) && duration > 0)
-                return duration;
+            var duration = await GetVideoPropertyAsync<double>("duration");
+            if (duration is > 0 && double.IsFinite(duration.Value))
+                return duration.Value;
 
             await Task.Delay(250, cancellationToken);
         }
 
         return null;
+    }
+
+    private async Task<T?> GetVideoPropertyAsync<T>(string propertyName)
+        where T : struct
+    {
+        var element = await _video.ElementHandleAsync();
+        if (element is null)
+            return null;
+
+        var property = await element.GetPropertyAsync(propertyName);
+        try
+        {
+            return await property.JsonValueAsync<T>();
+        }
+        catch (PlaywrightException)
+        {
+            return null;
+        }
+        finally
+        {
+            await property.DisposeAsync();
+        }
     }
 }

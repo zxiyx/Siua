@@ -5,7 +5,7 @@ using Microsoft.Playwright;
 
 namespace Siua.Core.Zhs;
 
-public sealed class PageResolver
+public sealed class ZhsPageResolver
 {
     private const string MainContainerSelector = "div.main-container";
     private const string ChapterSelector =
@@ -17,7 +17,7 @@ public sealed class PageResolver
     private readonly IPage _page;
     private ILocator? _mainContainer;
 
-    public PageResolver(IPage page)
+    public ZhsPageResolver(IPage page)
     {
         _page = page;
     }
@@ -43,7 +43,7 @@ public sealed class PageResolver
         }
     }
 
-    public async Task<IReadOnlyList<Chapter>> ResolveChaptersAsync(
+    public async Task<IReadOnlyList<ZhsChapter>> ResolveChaptersAsync(
         CancellationToken cancellationToken = default)
     {
         if (_mainContainer is null && !await WaitLoadingAsync(cancellationToken))
@@ -56,11 +56,11 @@ public sealed class PageResolver
             Timeout = 30_000
         });
 
-        var chapters = new List<Chapter>();
+        var chapters = new List<ZhsChapter>();
         foreach (var chapterLocator in await chapterLocators.AllAsync())
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var chapter = new Chapter(chapterLocator);
+            var chapter = new ZhsChapter(chapterLocator);
             await chapter.ResolveAsync(cancellationToken);
             chapters.Add(chapter);
         }
@@ -88,7 +88,7 @@ public sealed class PageResolver
         }
     }
 
-    public async Task<Video?> ResolveCurrentVideoAsync(
+    public async Task<ZhsVideo?> ResolveCurrentVideoAsync(
         CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -106,7 +106,7 @@ public sealed class PageResolver
             return null;
         }
 
-        return new Video(video);
+        return new ZhsVideo(video);
     }
 
     private ILocator GetMainContainer() =>

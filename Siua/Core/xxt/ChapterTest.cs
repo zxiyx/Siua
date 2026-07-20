@@ -1,27 +1,29 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Playwright;
 
-namespace Siua.Core;
+namespace Siua.Core.Xxt;
 
-public sealed class ChapterTest
+public sealed class XxtChapterTest
 {
     private readonly ILocator _container;
-    private readonly List<Question> _questions = [];
+    private readonly List<XxtQuestion> _questions = [];
     private ILocator? _testPanel;
 
-    public ChapterTest(ILocator container)
+    public XxtChapterTest(ILocator container)
     {
         _container = container;
     }
 
-    public IReadOnlyList<Question> Questions => _questions;
+    public IReadOnlyList<XxtQuestion> Questions => _questions;
     public bool IsCompleted { get; private set; }
     public bool HasQuestion => _questions.Count > 0;
 
-    public async Task SubmitAnswerAsync()
+    public async Task SubmitAnswerAsync(CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         if (_testPanel is null)
         {
             return;
@@ -38,11 +40,16 @@ public sealed class ChapterTest
         }
     }
 
-    public async Task LoadQuestionsAsync()
+    public async Task LoadQuestionsAsync(CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         _questions.Clear();
-        var frame = await GetRequiredContentFrameAsync(_container.Locator("iframe").First);
-        var innerFrame = await GetRequiredContentFrameAsync(frame.Locator("iframe").First);
+        var frame = await GetRequiredContentFrameAsync(
+            _container.Locator("iframe").First,
+            cancellationToken);
+        var innerFrame = await GetRequiredContentFrameAsync(
+            frame.Locator("iframe").First,
+            cancellationToken);
 
         IsCompleted = await innerFrame.Locator("div.testTit_status_complete").CountAsync() > 0;
         _testPanel = innerFrame.Locator("div.radiusBG > div.CeYan");
@@ -57,12 +64,16 @@ public sealed class ChapterTest
         var count = await questionLocators.CountAsync();
         for (var index = 0; index < count; index++)
         {
-            _questions.Add(new Question(questionLocators.Nth(index)));
+            cancellationToken.ThrowIfCancellationRequested();
+            _questions.Add(new XxtQuestion(questionLocators.Nth(index)));
         }
     }
 
-    private static async Task<IFrame> GetRequiredContentFrameAsync(ILocator locator)
+    private static async Task<IFrame> GetRequiredContentFrameAsync(
+        ILocator locator,
+        CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         await locator.WaitForAsync();
         var element = await locator.ElementHandleAsync()
             ?? throw new PlaywrightException("无法获取测试 iframe 元素。");
@@ -71,12 +82,12 @@ public sealed class ChapterTest
     }
 }
 
-public sealed class Question
+public sealed class XxtQuestion
 {
     private readonly ILocator _container;
     private readonly Dictionary<ILocator, ILocator> _answers = [];
 
-    public Question(ILocator container)
+    public XxtQuestion(ILocator container)
     {
         _container = container;
     }
@@ -84,8 +95,9 @@ public sealed class Question
     public string Title { get; private set; } = string.Empty;
     public IReadOnlyDictionary<ILocator, ILocator> Answers => _answers;
 
-    public async Task LoadAnswersAsync()
+    public async Task LoadAnswersAsync(CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         _answers.Clear();
         var titleLocator = _container.Locator("div.Zy_TItle.clearfix").First;
         await titleLocator.WaitForAsync();
@@ -95,13 +107,16 @@ public sealed class Question
         var count = await answerItems.CountAsync();
         for (var index = 0; index < count; index++)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var item = answerItems.Nth(index);
             _answers[item.Locator("label")] = item.Locator("a");
         }
     }
 
-    public async Task<byte[]?> CaptureImageAsync()
+    public async Task<byte[]?> CaptureImageAsync(
+        CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         try
         {
             return await _container.ScreenshotAsync(new LocatorScreenshotOptions

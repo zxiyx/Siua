@@ -7,7 +7,7 @@ using Microsoft.Playwright;
 using Microsoft.Win32;
 using Siua.Common;
 using Siua.Interfaces;
-using Siua.Core;
+using Siua.Core.Xxt;
 using Siua.Core.Zhs;
 
 namespace Siua.Services;
@@ -152,7 +152,12 @@ public sealed class CoreService : ICoreService
         try
         {
             var cancellationToken = GetSessionToken();
-            _zhsRunner ??= new ZhsRunner(page, _settings, _logService);
+            _zhsRunner ??= new ZhsRunner(
+                page,
+                _settings,
+                _logService,
+                _ocrService,
+                _aiControlService);
             await _zhsRunner.RunAsync(cancellationToken);
         }
         catch (OperationCanceledException) when (!IsSessionActive)
@@ -165,7 +170,10 @@ public sealed class CoreService : ICoreService
         }
         catch (Exception exception)
         {
-            _logService.AddLog($"处理智慧树课程失败：{exception.Message}");
+            _logService.AddLog(
+                LogLevel.Error,
+                "Zhs",
+                $"处理智慧树课程失败：{exception.Message}");
         }
 
         // 智慧树适配器一次处理整门课程，结束外层逐页循环。
@@ -201,8 +209,13 @@ public sealed class CoreService : ICoreService
         }
         catch (Exception exception)
         {
-            _logService.AddLog($"处理课程页面失败：{exception.Message}");
-            return IsSessionActive;
+            _logService.AddLog(
+                LogLevel.Error,
+                "Xxt",
+                $"处理学习通课程页面失败：{exception.Message}");
+            // Runner 已经自行跳过可恢复的任务点异常；到达这里表示当前页无法安全继续，
+            // 直接结束可避免外层循环反复处理同一页面。
+            return false;
         }
     }
 

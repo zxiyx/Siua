@@ -20,6 +20,8 @@ namespace Siua.Services;
 
 public sealed class Pix2TextService : IDisposable
 {
+    private const string LogSource = "Pix2Text";
+
     private readonly GlobalSettings _settings;
     private readonly ILogService _logService;
     private readonly SemaphoreSlim _installLock = new(1, 1);
@@ -57,12 +59,12 @@ public sealed class Pix2TextService : IDisposable
             {
                 await SaveExecutablePathAsync(existingExecutable);
                 ErrorMessage = null;
-                _logService.AddLog($"Pix2Text 服务组件已安装：{existingExecutable}");
+                LogInfo($"Pix2Text 服务组件已安装：{existingExecutable}");
                 return true;
             }
 
             if (existingExecutable is not null)
-                _logService.AddLog("[Pix2Text 安装] 检测到基础包，正在补充 HTTP 服务依赖...");
+                LogInfo("[Pix2Text 安装] 检测到基础包，正在补充 HTTP 服务依赖...");
 
             var installRoot = GetInstallRoot();
             var runtimeDirectory = Path.Combine(installRoot, "Pix2TextRuntime");
@@ -83,12 +85,12 @@ public sealed class Pix2TextService : IDisposable
                 var pythonRequest = "python.exe";
                 if (await HasSystemPythonAsync(cancellationToken))
                 {
-                    _logService.AddLog("[Pix2Text 安装] 检测到现有 Python，直接使用");
+                    LogInfo("[Pix2Text 安装] 检测到现有 Python，直接使用");
                 }
                 else
                 {
                     pythonRequest = "3.11";
-                    _logService.AddLog("[Pix2Text 安装] 未找到 Python，准备 Python 3.11...");
+                    LogInfo("[Pix2Text 安装] 未找到 Python，准备 Python 3.11...");
                     if (await RunUvAsync(
                             installRoot,
                             environment,
@@ -99,7 +101,7 @@ public sealed class Pix2TextService : IDisposable
                     }
                 }
 
-                _logService.AddLog("[Pix2Text 安装] 创建独立运行环境...");
+                LogInfo("[Pix2Text 安装] 创建独立运行环境...");
                 if (await RunUvAsync(
                         installRoot,
                         environment,
@@ -110,7 +112,7 @@ public sealed class Pix2TextService : IDisposable
                 }
             }
 
-            _logService.AddLog("[Pix2Text 安装] 安装或更新 Pix2Text，下载模型依赖可能需要一些时间...");
+            LogInfo("[Pix2Text 安装] 安装或更新 Pix2Text，下载模型依赖可能需要一些时间...");
             if (await RunUvAsync(
                     installRoot,
                     environment,
@@ -125,25 +127,25 @@ public sealed class Pix2TextService : IDisposable
 
             await SaveExecutablePathAsync(pix2TextExecutable);
             ErrorMessage = null;
-            _logService.AddLog("Pix2Text 安装完成，可以点击“启动 Pix2Text”");
+            LogInfo("Pix2Text 安装完成，可以点击“启动 Pix2Text”");
             return true;
         }
         catch (OperationCanceledException)
         {
             ErrorMessage = "Pix2Text 安装已取消";
-            _logService.AddLog(ErrorMessage);
+            LogInfo(ErrorMessage);
             return false;
         }
         catch (Win32Exception exception)
         {
             ErrorMessage = "未找到 uv，请先安装 uv 并确保 uv.exe 已加入 PATH";
-            _logService.AddLog(LogLevel.Error, "OCR", $"{ErrorMessage}：{exception.Message}");
+            LogError($"{ErrorMessage}：{exception.Message}");
             return false;
         }
         catch (Exception exception)
         {
             ErrorMessage = exception.Message;
-            _logService.AddLog(LogLevel.Error, "OCR", $"Pix2Text 安装失败：{exception.Message}");
+            LogError($"Pix2Text 安装失败：{exception.Message}");
             return false;
         }
         finally
@@ -157,7 +159,7 @@ public sealed class Pix2TextService : IDisposable
         if (!TryGetEndpoint(out var listenAddress, out var serviceUri, out var endpointError))
         {
             ErrorMessage = endpointError;
-            _logService.AddLog(LogLevel.Error, "OCR", endpointError);
+            LogError(endpointError);
             return false;
         }
 
@@ -173,7 +175,7 @@ public sealed class Pix2TextService : IDisposable
             if (!TryGetEndpoint(out listenAddress, out serviceUri, out endpointError))
             {
                 ErrorMessage = endpointError;
-                _logService.AddLog(LogLevel.Error, "OCR", endpointError);
+                LogError(endpointError);
                 return false;
             }
 
@@ -187,7 +189,7 @@ public sealed class Pix2TextService : IDisposable
             if (executable is null)
             {
                 ErrorMessage = "未找到 Pix2Text Runtime，请先点击“安装 Pix2Text”。";
-                _logService.AddLog(ErrorMessage);
+                LogError(ErrorMessage);
                 return false;
             }
 
@@ -197,11 +199,11 @@ public sealed class Pix2TextService : IDisposable
             if (!File.Exists(pythonExecutable))
             {
                 ErrorMessage = "Pix2Text Runtime 中没有找到 python.exe，请重新安装。";
-                _logService.AddLog(ErrorMessage);
+                LogError(ErrorMessage);
                 return false;
             }
 
-            _logService.AddLog($"正在启动 Pix2Text（{serviceUri.Authority}），首次加载模型可能需要较长时间...");
+            LogInfo($"正在启动 Pix2Text（{serviceUri.Authority}），首次加载模型可能需要较长时间...");
             var process = new Process
             {
                 StartInfo = new ProcessStartInfo
@@ -219,12 +221,12 @@ public sealed class Pix2TextService : IDisposable
             process.OutputDataReceived += (_, e) =>
             {
                 if (!string.IsNullOrWhiteSpace(e.Data))
-                    _logService.AddLog($"[Pix2Text] {e.Data}");
+                    LogInfo(e.Data);
             };
             process.ErrorDataReceived += (_, e) =>
             {
                 if (!string.IsNullOrWhiteSpace(e.Data))
-                    _logService.AddLog($"[Pix2Text] {e.Data}");
+                    LogProcessOutput(e.Data);
             };
             _process = process;
             process.Start();
@@ -241,7 +243,7 @@ public sealed class Pix2TextService : IDisposable
                 {
                     IsReady = true;
                     ErrorMessage = null;
-                    _logService.AddLog("Pix2Text 已就绪，支持普通文字和数学公式识别");
+                    LogInfo("Pix2Text 已就绪，支持普通文字和数学公式识别");
                     return true;
                 }
 
@@ -251,13 +253,13 @@ public sealed class Pix2TextService : IDisposable
             ErrorMessage = process.HasExited
                 ? $"Pix2Text 启动失败，进程退出码：{process.ExitCode}"
                 : "Pix2Text 模型加载超时";
-            _logService.AddLog(ErrorMessage);
+            LogError(ErrorMessage);
             return false;
         }
         catch (Exception ex)
         {
             ErrorMessage = ex.Message;
-            _logService.AddLog(LogLevel.Error,"OCR",$"Pix2Text 启动失败：{ex.Message}");
+            LogError($"Pix2Text 启动失败：{ex.Message}");
             return false;
         }
         finally
@@ -296,7 +298,7 @@ public sealed class Pix2TextService : IDisposable
             {
                 ErrorMessage =
                     $"HTTP {(int)response.StatusCode} ({response.ReasonPhrase})：{json}";
-                _logService.AddLog($"Pix2Text 识别失败：{ErrorMessage}");
+                LogError($"Pix2Text 识别失败：{ErrorMessage}");
                 return null;
             }
 
@@ -306,7 +308,7 @@ public sealed class Pix2TextService : IDisposable
         {
             ErrorMessage = ex.Message;
             IsReady = false;
-            _logService.AddLog($"Pix2Text 识别失败：{ex.Message}");
+            LogError($"Pix2Text 识别失败：{ex.Message}");
             return null;
         }
     }
@@ -330,11 +332,15 @@ public sealed class Pix2TextService : IDisposable
 
         IsReady = false;
         ErrorMessage = null;
-        _logService.AddLog(stopped && fullyStopped
+        var message = stopped && fullyStopped
             ? "Pix2Text 服务已完全停止，监听端口已释放"
             : fullyStopped
                 ? "Pix2Text 服务当前未运行"
-                : "Pix2Text 服务停止失败，监听端口仍被占用");
+                : "Pix2Text 服务停止失败，监听端口仍被占用";
+        if (fullyStopped)
+            LogInfo(message);
+        else
+            LogError(message);
         return fullyStopped;
     }
 
@@ -379,10 +385,7 @@ public sealed class Pix2TextService : IDisposable
             }
             catch (Exception exception)
             {
-                _logService.AddLog(
-                    LogLevel.Error,
-                    "OCR",
-                    $"Pix2Text 监听进程 {processId} 停止失败：{exception.Message}");
+                LogError($"Pix2Text 监听进程 {processId} 停止失败：{exception.Message}");
             }
         }
 
@@ -553,7 +556,7 @@ public sealed class Pix2TextService : IDisposable
     private bool InstallationFailed(string message)
     {
         ErrorMessage = message;
-        _logService.AddLog(LogLevel.Error, "OCR", message);
+        LogError(message);
         return false;
     }
 
@@ -679,7 +682,7 @@ public sealed class Pix2TextService : IDisposable
         while (await reader.ReadLineAsync() is { } line)
         {
             if (!string.IsNullOrWhiteSpace(line))
-                _logService.AddLog($"[Pix2Text 安装] {line}");
+                LogInfo($"[安装] {line}");
         }
     }
 
@@ -814,6 +817,26 @@ public sealed class Pix2TextService : IDisposable
         finally
         {
             process.Dispose();
+        }
+    }
+
+    private void LogInfo(string message) =>
+        _logService.AddLog(LogLevel.Info, LogSource, message);
+
+    private void LogError(string message) =>
+        _logService.AddLog(LogLevel.Error, LogSource, message);
+
+    private void LogProcessOutput(string message)
+    {
+        if (message.Contains("Traceback", StringComparison.OrdinalIgnoreCase) ||
+            message.Contains("ERROR", StringComparison.OrdinalIgnoreCase) ||
+            message.Contains("Exception", StringComparison.OrdinalIgnoreCase))
+        {
+            LogError(message);
+        }
+        else
+        {
+            LogInfo(message);
         }
     }
 

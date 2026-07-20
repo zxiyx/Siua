@@ -4,9 +4,9 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Playwright;
 
-namespace Siua.Core;
+namespace Siua.Core.Xxt;
 
-public sealed class Video
+public sealed class XxtVideo
 {
     private const string IncompleteIconSelector =
         "div.ans-job-icon.ans-job-icon-clear[aria-label='任务点未完成']";
@@ -21,7 +21,7 @@ public sealed class Video
     private ILocator? _playButton;
     private ILocator? _bigPlayButton;
 
-    public Video(ILocator container, GlobalSettings settings)
+    public XxtVideo(ILocator container, GlobalSettings settings)
     {
         _container = container;
         _settings = settings;
@@ -29,14 +29,7 @@ public sealed class Video
 
     public async Task<bool> IsCompletedAsync()
     {
-        try
-        {
-            return await _container.Locator(IncompleteIconSelector).CountAsync() == 0;
-        }
-        catch (PlaywrightException)
-        {
-            return true;
-        }
+        return await _container.Locator(IncompleteIconSelector).CountAsync() == 0;
     }
 
     public async Task InitializeAsync()

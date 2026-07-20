@@ -1,14 +1,15 @@
 ﻿using System;
+using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Playwright;
 
-namespace Siua.Core;
+namespace Siua.Core.Xxt;
 
-public class Doc
+public sealed class XxtDocument
 {
     private readonly IFrame _frame;
 
-    public Doc(IFrame frame, bool isCompleted)
+    public XxtDocument(IFrame frame, bool isCompleted)
     {
         _frame = frame;
         IsCompleted = isCompleted;
@@ -16,10 +17,11 @@ public class Doc
 
     public bool IsCompleted { get; }
 
-    public async Task ScrollToEndAsync()
+    public async Task ScrollToEndAsync(CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         await _frame.Locator("ul > li").Last.ScrollIntoViewIfNeededAsync();
-        await _frame.WaitForTimeoutAsync(2000);
+        await Task.Delay(2_000, cancellationToken);
     }
     
     

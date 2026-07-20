@@ -1,11 +1,14 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Playwright;
+using Siua.Common;
+using Siua.Interfaces;
 
-namespace Siua.Core;
+namespace Siua.Core.Xxt;
 
-public sealed class PageResolver
+public sealed class XxtPageResolver
 {
     private const string MainFrameSelector = "div.course_main > iframe";
     private const string VideoContainerSelector = "p > div.videoContainer";
@@ -13,20 +16,25 @@ public sealed class PageResolver
 
     private readonly IPage _page;
     private readonly GlobalSettings _settings;
-    private readonly List<Video> _videos = [];
-    private readonly List<ChapterTest> _tests = [];
-    private readonly List<Doc> _docs = [];
+    private readonly ILogService _logService;
+    private readonly List<XxtVideo> _videos = [];
+    private readonly List<XxtChapterTest> _tests = [];
+    private readonly List<XxtDocument> _docs = [];
     private IFrame? _mainFrame;
 
-    public PageResolver(IPage page, GlobalSettings settings)
+    public XxtPageResolver(
+        IPage page,
+        GlobalSettings settings,
+        ILogService logService)
     {
         _page = page;
         _settings = settings;
+        _logService = logService;
     }
 
-    public IReadOnlyList<Video> Videos => _videos;
-    public IReadOnlyList<Doc> Docs => _docs;
-    public IReadOnlyList<ChapterTest> Tests => _tests;
+    public IReadOnlyList<XxtVideo> Videos => _videos;
+    public IReadOnlyList<XxtDocument> Docs => _docs;
+    public IReadOnlyList<XxtChapterTest> Tests => _tests;
     public bool HasVideo => _videos.Count > 0;
     public bool HasTest => _tests.Count > 0;
     public bool HasDoc => _docs.Count > 0;
@@ -63,7 +71,7 @@ public sealed class PageResolver
         var videoCount = await videoContainers.CountAsync();
         for (var index = 0; index < videoCount; index++)
         {
-            _videos.Add(new Video(videoContainers.Nth(index), _settings));
+            _videos.Add(new XxtVideo(videoContainers.Nth(index), _settings));
         }
 
         var attachmentContainers = _mainFrame.Locator(AttachmentContainerSelector);
@@ -71,20 +79,32 @@ public sealed class PageResolver
         for (var index = 0; index < attachmentCount; index++)
         {
             var container = attachmentContainers.Nth(index);
-            var document = await new DocResolver(container).ResolveAsync();
-            if (document is not null)
+            try
             {
-                _docs.Add(document);
+                var document = await new XxtDocumentResolver(container).ResolveAsync();
+                if (document is not null)
+                {
+                    _docs.Add(document);
+                }
+                else
+                {
+                    _tests.Add(new XxtChapterTest(container));
+                }
             }
-            else
+            catch (PlaywrightException exception)
             {
-                _tests.Add(new ChapterTest(container));
+                _logService.AddLog(
+                    LogLevel.Error,
+                    "Xxt",
+                    $"任务点解析失败，已跳过：{exception.Message}");
             }
         }
     }
 
-    public async Task ConfirmTestSubmissionAsync()
+    public async Task ConfirmTestSubmissionAsync(
+        CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         var popup = _page.Locator("div.maskDiv > div.popDiv.wid440.Marking").First;
         await popup.WaitForAsync(new LocatorWaitForOptions
         {

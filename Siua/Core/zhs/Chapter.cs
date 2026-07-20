@@ -1,27 +1,29 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Playwright;
 
 namespace Siua.Core.Zhs;
 
-public sealed class Chapter
+public sealed class ZhsChapter
 {
     private const string SectionSelector =
         "div.chapter-content > div.chapter-item > div.item-box, " +
         "div.chapter-content > div.chapter-item > div.chapter-content-second";
 
     private readonly ILocator _chapterLocator;
-    private readonly List<Section> _sections = [];
+    private readonly List<ZhsSection> _sections = [];
 
-    public Chapter(ILocator chapterLocator)
+    public ZhsChapter(ILocator chapterLocator)
     {
         _chapterLocator = chapterLocator;
     }
 
-    public IReadOnlyList<Section> Sections => _sections;
-    public ChapterTest? ChapterTest { get; private set; }
+    public IReadOnlyList<ZhsSection> Sections => _sections;
+    public ZhsChapterTest? ChapterTest { get; private set; }
     public bool HasTest => ChapterTest is not null;
 
     public async Task ResolveAsync(CancellationToken cancellationToken = default)
@@ -37,12 +39,12 @@ public sealed class Chapter
         foreach (var sectionLocator in sectionLocators)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            _sections.Add(new Section(sectionLocator));
+            _sections.Add(new ZhsSection(sectionLocator));
         }
 
         var testBox = content.Locator("div.test-box").First;
         if (await testBox.CountAsync() > 0)
-            ChapterTest = new ChapterTest(testBox);
+            ChapterTest = new ZhsChapterTest(testBox);
     }
 
     public async Task ExpandAsync(CancellationToken cancellationToken = default)
@@ -67,11 +69,15 @@ public sealed class Chapter
     }
 }
 
-public sealed class Section
+public sealed class ZhsSection
 {
+    private static readonly Regex StrokeDashArrayPattern = new(
+        @"stroke-dasharray\s*:\s*(?<value>[\d.]+)(?:px)?\s*,\s*(?<total>[\d.]+)(?:px)?",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
     private readonly ILocator _locator;
 
-    public Section(ILocator locator)
+    public ZhsSection(ILocator locator)
     {
         _locator = locator;
     }
@@ -86,18 +92,27 @@ public sealed class Section
         if (await progressPath.CountAsync() == 0)
             return 0;
 
-        return await progressPath.EvaluateAsync<double>(
-            """
-            path => {
-                const dashArray = getComputedStyle(path).strokeDasharray;
-                const values = dashArray.match(/[\d.]+/g)?.map(Number) ?? [];
-                if (values.length < 2 || !Number.isFinite(values[1]) || values[1] <= 0) {
-                    return 0;
-                }
+        var style = await progressPath.GetAttributeAsync("style");
+        var match = string.IsNullOrWhiteSpace(style)
+            ? Match.Empty
+            : StrokeDashArrayPattern.Match(style);
+        if (!match.Success ||
+            !double.TryParse(
+                match.Groups["value"].Value,
+                NumberStyles.Float,
+                CultureInfo.InvariantCulture,
+                out var value) ||
+            !double.TryParse(
+                match.Groups["total"].Value,
+                NumberStyles.Float,
+                CultureInfo.InvariantCulture,
+                out var total) ||
+            total <= 0)
+        {
+            return 0;
+        }
 
-                return Math.min(100, Math.max(0, values[0] / values[1] * 100));
-            }
-            """);
+        return Math.Clamp(value / total * 100, 0, 100);
     }
 
     public async Task<bool> IsCompletedAsync(CancellationToken cancellationToken = default) =>

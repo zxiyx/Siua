@@ -2,41 +2,34 @@
 using System.Threading.Tasks;
 using Microsoft.Playwright;
 
-namespace Siua.Core;
+namespace Siua.Core.Xxt;
 
-public sealed class DocResolver
+public sealed class XxtDocumentResolver
 {
 
     private const string IncompleteIconSelector = "div.ans-job-icon[aria-label='任务点未完成']";
     private readonly ILocator _container;
 
-    public DocResolver(ILocator container)
+    public XxtDocumentResolver(ILocator container)
     {
         _container = container;
     }
 
-    public async Task<Doc?> ResolveAsync()
+    public async Task<XxtDocument?> ResolveAsync()
     {
-        try
-        {
-            var outerFrame = await GetContentFrameAsync(_container.Locator("iframe").First);
-            if (outerFrame is null || await outerFrame.Locator("#docContainer").CountAsync() == 0)
-            {
-                return null;
-            }
-
-            var documentFrame = await GetContentFrameAsync(outerFrame.Locator("#panView").Last);
-            if (documentFrame is null)
-            {
-                return null;
-            }
-            var isCompleted = await _container.Locator(IncompleteIconSelector).CountAsync() == 0;
-            return new Doc(documentFrame, isCompleted);
-        }
-        catch (PlaywrightException)
+        var outerFrame = await GetContentFrameAsync(_container.Locator("iframe").First);
+        if (outerFrame is null || await outerFrame.Locator("#docContainer").CountAsync() == 0)
         {
             return null;
         }
+
+        var documentFrame = await GetContentFrameAsync(outerFrame.Locator("#panView").Last);
+        if (documentFrame is null)
+        {
+            return null;
+        }
+        var isCompleted = await _container.Locator(IncompleteIconSelector).CountAsync() == 0;
+        return new XxtDocument(documentFrame, isCompleted);
     }
 
     private static async Task<IFrame?> GetContentFrameAsync(ILocator locator)
