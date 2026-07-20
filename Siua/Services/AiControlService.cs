@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Threading.Tasks;
 using OpenAI;
 using OpenAI.Chat;
@@ -46,8 +45,14 @@ public class AiControlService
         }
     }
 
-    public async Task<string?> GetTextFromImage(string imagePath)
+    public async Task<string?> GetTextFromImage(byte[] imageBytes)
     {
+        if (imageBytes is not { Length: > 0 })
+        {
+            _logService.AddLog(LogLevel.Error, "AI", "图像识别失败：截图数据为空");
+            return null;
+        }
+
         using var client = CreateClient();
         if (client is null)
         {
@@ -56,7 +61,6 @@ public class AiControlService
 
         try
         {
-            var imageBytes = await File.ReadAllBytesAsync(imagePath);
             var dataUri = $"image/png;base64,{Convert.ToBase64String(imageBytes)}";
             var content = new List<Content>
             {

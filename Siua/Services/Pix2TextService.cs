@@ -269,9 +269,16 @@ public sealed class Pix2TextService : IDisposable
     }
 
     public async Task<string?> RecognizeAsync(
-        string imagePath,
+        byte[] imageBytes,
         CancellationToken cancellationToken = default)
     {
+        if (imageBytes is not { Length: > 0 })
+        {
+            ErrorMessage = "截图数据为空";
+            LogError($"Pix2Text 识别失败：{ErrorMessage}");
+            return null;
+        }
+
         if (!await EnsureReadyAsync(cancellationToken))
             return null;
 
@@ -283,10 +290,9 @@ public sealed class Pix2TextService : IDisposable
             form.Add(new StringContent(" $,$ "), "embed_sep");
             form.Add(new StringContent("$$\n,\n$$"), "isolated_sep");
 
-            var imageBytes = await File.ReadAllBytesAsync(imagePath, cancellationToken);
             using var image = new ByteArrayContent(imageBytes);
-            image.Headers.ContentType = new MediaTypeHeaderValue(GetMediaType(imagePath));
-            form.Add(image, "image", Path.GetFileName(imagePath));
+            image.Headers.ContentType = new MediaTypeHeaderValue("image/png");
+            form.Add(image, "image", "question.png");
 
             if (!TryGetEndpoint(out _, out var serviceUri, out var endpointError))
                 throw new InvalidOperationException(endpointError);
@@ -303,6 +309,10 @@ public sealed class Pix2TextService : IDisposable
             }
 
             return ExtractText(json);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
         }
         catch (Exception ex)
         {
@@ -752,12 +762,6 @@ public sealed class Pix2TextService : IDisposable
         normalized = Regex.Replace(normalized, @"\s*([+\-=(),])\s*", "$1");
         return Regex.Replace(normalized, @"\s+", " ").Trim();
     }
-
-    private static string GetMediaType(string path) =>
-        Path.GetExtension(path).Equals(".jpg", StringComparison.OrdinalIgnoreCase) ||
-        Path.GetExtension(path).Equals(".jpeg", StringComparison.OrdinalIgnoreCase)
-            ? "image/jpeg"
-            : "image/png";
 
     private bool TryGetEndpoint(
         out IPAddress listenAddress,

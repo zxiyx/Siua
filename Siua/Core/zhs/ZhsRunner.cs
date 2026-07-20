@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Playwright;
@@ -173,7 +172,6 @@ public sealed class ZhsRunner
         ZhsChapterTest chapterTest,
         CancellationToken cancellationToken)
     {
-        var imagePath = Path.Combine(_settings.UserDataDir, "zhs-question.png");
         var originalCourseUrl = _page.Url;
         IPage? examPage = null;
         try
@@ -209,7 +207,6 @@ public sealed class ZhsRunner
                     $"识别并回答智慧树章节测试第 {index + 1}/{questionCount} 题...");
                 if (!await AnswerQuestionAsync(
                         question,
-                        imagePath,
                         cancellationToken))
                 {
                     return false;
@@ -250,9 +247,6 @@ public sealed class ZhsRunner
         }
         finally
         {
-            if (File.Exists(imagePath))
-                File.Delete(imagePath);
-
             if (examPage is not null)
             {
                 try
@@ -272,17 +266,15 @@ public sealed class ZhsRunner
 
     private async Task<bool> AnswerQuestionAsync(
         ZhsQuestion question,
-        string imagePath,
         CancellationToken cancellationToken)
     {
         var image = await question.CaptureImageAsync(cancellationToken);
         if (image is null)
             return DisableAutoTest("智慧树题目截图失败，已关闭自动答题");
 
-        await File.WriteAllBytesAsync(imagePath, image, cancellationToken);
         var questionText = _settings.UsedAiToOcr
-            ? await _aiControlService.GetTextFromImage(imagePath)
-            : await _ocrService.RecognizeAsync(imagePath, cancellationToken);
+            ? await _aiControlService.GetTextFromImage(image)
+            : await _ocrService.RecognizeAsync(image, cancellationToken);
         if (questionText is null)
         {
             return DisableAutoTest(_settings.UsedAiToOcr

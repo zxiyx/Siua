@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Playwright;
@@ -153,60 +152,49 @@ public sealed class XxtRunner
         XxtPageResolver resolver,
         CancellationToken cancellationToken)
     {
-        var imagePath = Path.Combine(_settings.UserDataDir, "q.png");
-        try
+        foreach (var chapterTest in resolver.Tests)
         {
-            foreach (var chapterTest in resolver.Tests)
+            try
             {
-                try
+                await chapterTest.LoadQuestionsAsync(cancellationToken);
+                if (chapterTest.IsCompleted)
+                    LogInfo("该章节测试已完成");
+
+                if (!chapterTest.HasQuestion || chapterTest.IsCompleted)
+                    continue;
+
+                foreach (var question in chapterTest.Questions)
                 {
-                    await chapterTest.LoadQuestionsAsync(cancellationToken);
-                    if (chapterTest.IsCompleted)
-                        LogInfo("该章节测试已完成");
-
-                    if (!chapterTest.HasQuestion || chapterTest.IsCompleted)
-                        continue;
-
-                    foreach (var question in chapterTest.Questions)
+                    if (!await AnswerQuestionAsync(
+                            question,
+                            cancellationToken))
                     {
-                        if (!await AnswerQuestionAsync(
-                                question,
-                                imagePath,
-                                cancellationToken))
-                        {
-                            return false;
-                        }
-
-                        await Task.Delay(_settings.AiAnsweringInterval, cancellationToken);
+                        return false;
                     }
 
-                    await chapterTest.SubmitAnswerAsync(cancellationToken);
-                    await resolver.ConfirmTestSubmissionAsync(cancellationToken);
-                    LogInfo("该章节测试提交成功");
-                    await Task.Delay(_settings.ChapterJumpInterval, cancellationToken);
+                    await Task.Delay(_settings.AiAnsweringInterval, cancellationToken);
                 }
-                catch (OperationCanceledException)
-                {
-                    throw;
-                }
-                catch (PlaywrightException exception) when (!_page.IsClosed)
-                {
-                    LogError($"章节测试控件处理失败，已跳过：{exception.Message}");
-                }
-            }
 
-            return true;
+                await chapterTest.SubmitAnswerAsync(cancellationToken);
+                await resolver.ConfirmTestSubmissionAsync(cancellationToken);
+                LogInfo("该章节测试提交成功");
+                await Task.Delay(_settings.ChapterJumpInterval, cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (PlaywrightException exception) when (!_page.IsClosed)
+            {
+                LogError($"章节测试控件处理失败，已跳过：{exception.Message}");
+            }
         }
-        finally
-        {
-            if (File.Exists(imagePath))
-                File.Delete(imagePath);
-        }
+
+        return true;
     }
 
     private async Task<bool> AnswerQuestionAsync(
         XxtQuestion question,
-        string imagePath,
         CancellationToken cancellationToken)
     {
         await question.LoadAnswersAsync(cancellationToken);
@@ -214,10 +202,9 @@ public sealed class XxtRunner
         if (image is null)
             return DisableAutoTest("题目截图失败，已关闭自动答题");
 
-        await File.WriteAllBytesAsync(imagePath, image, cancellationToken);
         var questionText = _settings.UsedAiToOcr
-            ? await _aiControlService.GetTextFromImage(imagePath)
-            : await _ocrService.RecognizeAsync(imagePath, cancellationToken);
+            ? await _aiControlService.GetTextFromImage(image)
+            : await _ocrService.RecognizeAsync(image, cancellationToken);
 
         if (questionText is null)
         {
