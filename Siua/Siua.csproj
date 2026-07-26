@@ -1,7 +1,6 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
         <OutputType>WinExe</OutputType>
-        <TargetFramework>net10.0</TargetFramework>
         <Nullable>enable</Nullable>
         <ApplicationManifest>app.manifest</ApplicationManifest>
         <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
@@ -14,6 +13,8 @@
 		<PlaywrightSkipBrowserInstall>true</PlaywrightSkipBrowserInstall>
 
 		<PlatformTarget>AnyCPU</PlatformTarget>
+
+		<TargetFrameworks>net10.0;net8.0</TargetFrameworks>
     </PropertyGroup>
     <PropertyGroup Condition=" '$(Configuration)' == 'Debug' ">
       <Optimize>false</Optimize>

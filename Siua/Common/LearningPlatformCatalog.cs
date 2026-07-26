@@ -7,8 +7,6 @@ public static class LearningPlatformCatalog
 {
     public const string XueXiTong = "学习通";
     public const string ZhiHuiShu = "智慧树";
-    public const string ChineseUniversityMooc = "中国大学MOOC";
-    public const string Unipus = "U校园";
 
     public static bool IsSupported(string? platform) =>
         string.Equals(platform, XueXiTong, StringComparison.Ordinal) ||

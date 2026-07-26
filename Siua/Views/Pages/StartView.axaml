@@ -59,26 +59,6 @@
                                 </StackPanel>
                             </StackPanel>
                         </RadioButton>
-                        <RadioButton Classes="GigaChips" GroupName="Platform" Width="168" Height="72" Margin="0,0,8,8"
-                                     IsChecked="{Binding SelectedPlatform, Converter={StaticResource StringEquals}, ConverterParameter=中国大学MOOC}">
-                            <StackPanel Orientation="Horizontal" Spacing="9">
-                                <icons:MaterialIcon Kind="Earth" Width="24" Height="24"/>
-                                <StackPanel Spacing="2">
-                                    <TextBlock Text="慕课" FontSize="14" FontWeight="SemiBold"/>
-                                    <TextBlock Text="中国大学MOOC" FontSize="11" Opacity="0.72"/>
-                                </StackPanel>
-                            </StackPanel>
-                        </RadioButton>
-                        <RadioButton Classes="GigaChips" GroupName="Platform" Width="168" Height="72" Margin="0,0,8,8"
-                                     IsChecked="{Binding SelectedPlatform, Converter={StaticResource StringEquals}, ConverterParameter=学堂在线}">
-                            <StackPanel Orientation="Horizontal" Spacing="9">
-                                <icons:MaterialIcon Kind="BookOpenVariant" Width="24" Height="24"/>
-                                <StackPanel Spacing="2">
-                                    <TextBlock Text="U校园" FontSize="15" FontWeight="SemiBold"/>
-                                    <TextBlock Text="Unipus" FontSize="11" Opacity="0.72"/>
-                                </StackPanel>
-                            </StackPanel>
-                        </RadioButton>
                     </WrapPanel>
                 </StackPanel>
             </suki:GlassCard>

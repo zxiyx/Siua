@@ -56,9 +56,11 @@ public partial class StartViewModel :PageBase
     public StartViewModel(GlobalSettings globalSettings,ICoreService coreService,Pix2TextService pix2TextService) : base("开始", MaterialIconKind.Application, 0)
     {
         _settings = globalSettings;
-        _selectedPlatform = string.IsNullOrWhiteSpace(globalSettings.CurrentPlatform)
-            ? "学习通"
-            : globalSettings.CurrentPlatform;
+        _selectedPlatform = LearningPlatformCatalog.IsSupported(globalSettings.CurrentPlatform)
+            ? globalSettings.CurrentPlatform
+            : LearningPlatformCatalog.XueXiTong;
+        if (!string.Equals(globalSettings.CurrentPlatform, _selectedPlatform, StringComparison.Ordinal))
+            globalSettings.CurrentPlatform = _selectedPlatform;
         _coreService = coreService;
         _pix2TextService = pix2TextService;
         _observedCourses = Settings.Courses;
