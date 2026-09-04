@@ -83,7 +83,7 @@ Siua 是一款面向 Windows 的桌面端课程自动化工具。它将课程管
 ### 环境要求
 
 - Windows 10 / 11
-- [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0)
+- [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0) / [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)
 - Microsoft Edge，或系统中可用的 Chromium 内核浏览器
 - 可正常访问课程平台的网络环境
 - 可选：AI 服务 API Key，用于章节测试分析或 AI 图像识别
