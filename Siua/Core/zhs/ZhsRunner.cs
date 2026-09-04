@@ -84,7 +84,7 @@ public sealed class ZhsRunner
 
                 if (chapter.HasTest)
                 {
-                    if (!_settings.AutoTest)
+                    if (!_settings.AutoTest && !_settings.RandomTest)
                     {
                         LogInfo("跳过章节测试");
                         continue;
@@ -269,6 +269,9 @@ public sealed class ZhsRunner
         ZhsQuestion question,
         CancellationToken cancellationToken)
     {
+        if (_settings.RandomTest)
+            return await SelectRandomAnswersAsync(question, cancellationToken);
+
         var image = await question.CaptureImageAsync(cancellationToken);
         if (image is null)
             return DisableAutoTest("智慧树题目截图失败，已关闭自动答题");
@@ -305,9 +308,36 @@ public sealed class ZhsRunner
                DisableAutoTest("AI 返回的答案无法匹配智慧树题目选项，已关闭自动答题");
     }
 
+    private async Task<bool> SelectRandomAnswersAsync(
+        ZhsQuestion question,
+        CancellationToken cancellationToken)
+    {
+        var selectedIndexes = RandomAnswerSelector.Select(
+            question.Answers.Count,
+            question.AllowsMultipleAnswers);
+        if (selectedIndexes.Count == 0)
+            return DisableRandomTest("未识别到智慧树题目选项，已关闭随机答题");
+
+        foreach (var index in selectedIndexes)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            await question.Answers[index].SelectAsync(cancellationToken);
+        }
+
+        LogInfo($"已随机选择 {selectedIndexes.Count} 个答案");
+        return true;
+    }
+
     private bool DisableAutoTest(string message)
     {
         _settings.AutoTest = false;
+        LogError(message);
+        return false;
+    }
+
+    private bool DisableRandomTest(string message)
+    {
+        _settings.RandomTest = false;
         LogError(message);
         return false;
     }

@@ -95,12 +95,14 @@ public sealed class XxtQuestion
     }
 
     public string Title { get; private set; } = string.Empty;
+    public bool AllowsMultipleAnswers { get; private set; }
     public IReadOnlyDictionary<ILocator, ILocator> Answers => _answers;
 
     public async Task LoadAnswersAsync(CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
         _answers.Clear();
+        AllowsMultipleAnswers = false;
         var titleLocator = _container.Locator("div.Zy_TItle.clearfix").First;
         await titleLocator.WaitForAsync();
         Title = await titleLocator.InnerTextAsync();
@@ -111,6 +113,7 @@ public sealed class XxtQuestion
         {
             cancellationToken.ThrowIfCancellationRequested();
             var item = answerItems.Nth(index);
+            AllowsMultipleAnswers |= await item.Locator("input[type=checkbox]").CountAsync() > 0;
             _answers[item.Locator("label")] = item.Locator("a");
         }
     }

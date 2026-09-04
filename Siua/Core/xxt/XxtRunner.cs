@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Playwright;
@@ -52,7 +53,7 @@ public sealed class XxtRunner
             await ProcessVideosAsync(resolver.Videos, cancellationToken);
             await ProcessDocumentsAsync(resolver.Docs, cancellationToken);
 
-            if (resolver.HasTest && _settings.AutoTest &&
+            if (resolver.HasTest && (_settings.AutoTest || _settings.RandomTest) &&
                 !await ProcessTestsAsync(resolver, cancellationToken))
             {
                 return false;
@@ -199,6 +200,9 @@ public sealed class XxtRunner
         CancellationToken cancellationToken)
     {
         await question.LoadAnswersAsync(cancellationToken);
+        if (_settings.RandomTest)
+            return await SelectRandomAnswersAsync(question, cancellationToken);
+
         var image = await question.CaptureImageAsync(cancellationToken);
         if (image is null)
             return DisableAutoTest("题目截图失败，已关闭自动答题");
@@ -237,9 +241,37 @@ public sealed class XxtRunner
                DisableAutoTest("AI 返回的答案无法匹配任何选项，已关闭自动答题");
     }
 
+    private async Task<bool> SelectRandomAnswersAsync(
+        XxtQuestion question,
+        CancellationToken cancellationToken)
+    {
+        var answers = question.Answers.ToArray();
+        var selectedIndexes = RandomAnswerSelector.Select(
+            answers.Length,
+            question.AllowsMultipleAnswers);
+        if (selectedIndexes.Count == 0)
+            return DisableRandomTest("未识别到题目选项，已关闭随机答题");
+
+        foreach (var index in selectedIndexes)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            await answers[index].Key.ClickAsync();
+        }
+
+        LogInfo($"已随机选择 {selectedIndexes.Count} 个答案");
+        return true;
+    }
+
     private bool DisableAutoTest(string message)
     {
         _settings.AutoTest = false;
+        LogError(message);
+        return false;
+    }
+
+    private bool DisableRandomTest(string message)
+    {
+        _settings.RandomTest = false;
         LogError(message);
         return false;
     }

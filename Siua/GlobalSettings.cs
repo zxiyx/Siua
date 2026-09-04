@@ -42,6 +42,7 @@ public partial class GlobalSettings : ObservableObject, IDisposable
     [ObservableProperty] private double _videoPlayRate = 1.0;
     [ObservableProperty] private bool _usedAiToOcr;
     [ObservableProperty] private bool _autoTest;
+    [ObservableProperty] private bool _randomTest;
 
     [ObservableProperty]
     [property: JsonIgnore]
@@ -147,6 +148,18 @@ public partial class GlobalSettings : ObservableObject, IDisposable
         value.PropertyChanged += HandleSettingsChanged;
     }
 
+    partial void OnAutoTestChanged(bool value)
+    {
+        if (value)
+            RandomTest = false;
+    }
+
+    partial void OnRandomTestChanged(bool value)
+    {
+        if (value)
+            AutoTest = false;
+    }
+
     private void HandleSettingsChanged(object? sender, PropertyChangedEventArgs eventArgs)
     {
         if (_isInitialized && !_isLoading)
@@ -239,6 +252,7 @@ public partial class GlobalSettings : ObservableObject, IDisposable
         VideoPlayRate = VideoPlayRate,
         UsedAiToOcr = UsedAiToOcr,
         AutoTest = AutoTest,
+        RandomTest = RandomTest,
         CoursesByPlatform = _coursesByPlatform.ToDictionary(
             pair => pair.Key,
             pair => pair.Value.ToArray(),
@@ -290,6 +304,7 @@ public partial class GlobalSettings : ObservableObject, IDisposable
             : 1.0;
         UsedAiToOcr = snapshot.UsedAiToOcr;
         AutoTest = snapshot.AutoTest;
+        RandomTest = snapshot.RandomTest;
 
         var ai = snapshot.CurrentAi ?? new AiSettingsSnapshot();
         CurrentAi.AiProvider = ai.AiProvider;

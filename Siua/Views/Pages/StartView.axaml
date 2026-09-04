@@ -173,6 +173,18 @@
 
                     <Grid ColumnDefinitions="*,Auto">
                         <StackPanel>
+                            <TextBlock Text="随机答题" FontWeight="SemiBold"/>
+                            <TextBlock Text="无需配置 AI 模型，随机选择答案"
+                                       FontSize="12" Foreground="{DynamicResource SukiLowText}"/>
+                        </StackPanel>
+                        <ToggleButton Grid.Column="1" Classes="Switch"
+                                      IsChecked="{Binding Settings.RandomTest}"/>
+                    </Grid>
+
+                    <Separator/>
+
+                    <Grid ColumnDefinitions="*,Auto">
+                        <StackPanel>
                             <TextBlock Text="AI 识图" FontWeight="SemiBold"/>
                             <TextBlock Text="使用 AI 模型代替本地 Pix2Text 识别题目"
                                        FontSize="12" Foreground="{DynamicResource SukiLowText}"/>

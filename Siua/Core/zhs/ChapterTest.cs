@@ -253,6 +253,7 @@ public sealed class ZhsQuestion
     {
         cancellationToken.ThrowIfCancellationRequested();
         _answers.Clear();
+        AllowsMultipleAnswers = false;
 
         var number = _container.Locator("div.subject_num span").First;
         Number = ZhsChapterTest.NormalizeText(
