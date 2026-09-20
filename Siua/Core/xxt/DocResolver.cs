@@ -16,26 +16,32 @@ public sealed class XxtDocumentResolver
         _container = container;
     }
 
-    public async Task<XxtDocument?> ResolveAsync()
+    public async Task<XxtDocument?> ResolveAsync(bool requireDocument = false)
     {
-        var outerFrame = await GetContentFrameAsync(_container.Locator("iframe").First);
-        if (outerFrame is null || await outerFrame.Locator("#docContainer").CountAsync() == 0)
+        var outerFrame = await GetRequiredContentFrameAsync(_container.Locator("iframe").First);
+        var documentContainer = outerFrame.Locator("#docContainer");
+        if (requireDocument)
+        {
+            await documentContainer.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Attached });
+        }
+        else if (await documentContainer.CountAsync() == 0)
         {
             return null;
         }
 
-        var documentFrame = await GetContentFrameAsync(outerFrame.Locator("#panView").Last);
-        if (documentFrame is null)
-        {
-            return null;
-        }
+        var documentFrame = await GetRequiredContentFrameAsync(outerFrame.Locator("#panView").Last);
         var isCompleted = await _container.Locator(IncompleteIconSelector).CountAsync() == 0;
         return new XxtDocument(documentFrame, isCompleted);
     }
 
-    private static async Task<IFrame?> GetContentFrameAsync(ILocator locator)
+    private static async Task<IFrame> GetRequiredContentFrameAsync(ILocator locator)
     {
-        var element = await locator.ElementHandleAsync();
-        return element is null ? null : await element.ContentFrameAsync();
+        await locator.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Attached });
+        var element = await locator.ElementHandleAsync()
+            ?? throw new PlaywrightException("无法获取附件 iframe 元素。");
+        var frame = await element.ContentFrameAsync()
+            ?? throw new PlaywrightException("无法进入附件 iframe。");
+        await XxtPageResolver.WaitForFrameContentAsync(frame, locator);
+        return frame;
     }
 }

@@ -50,14 +50,20 @@ public sealed class XxtRunner
             }
 
             await resolver.ResolvePageAsync();
-            await ProcessVideosAsync(resolver.Videos, cancellationToken);
-            await ProcessDocumentsAsync(resolver.Docs, cancellationToken);
+            if (resolver.HasResolutionErrors && (_settings.AutoTest || _settings.RandomTest))
+            {
+                LogError("课程任务未能完整解析，已停止以避免漏掉章节测试");
+                return false;
+            }
 
             if (resolver.HasTest && (_settings.AutoTest || _settings.RandomTest) &&
                 !await ProcessTestsAsync(resolver, cancellationToken))
             {
                 return false;
             }
+
+            await ProcessVideosAsync(resolver.Videos, cancellationToken);
+            await ProcessDocumentsAsync(resolver.Docs, cancellationToken);
 
             LogInfo("进入下一节...");
             await resolver.NextPageAsync();
@@ -68,7 +74,8 @@ public sealed class XxtRunner
         {
             throw;
         }
-        catch (PlaywrightException exception) when (!_page.IsClosed)
+        catch (Exception exception) when (
+            exception is PlaywrightException or TimeoutException && !_page.IsClosed)
         {
             LogError($"学习通页面处理失败，当前任务已停止：{exception.Message}");
             return false;
@@ -160,10 +167,16 @@ public sealed class XxtRunner
             {
                 await chapterTest.LoadQuestionsAsync(cancellationToken);
                 if (chapterTest.IsCompleted)
+                {
                     LogInfo("该章节测试已完成");
-
-                if (!chapterTest.HasQuestion || chapterTest.IsCompleted)
                     continue;
+                }
+
+                if (!chapterTest.HasQuestion)
+                {
+                    LogError("章节测试尚未完成，但未识别到题目，已停止以避免跳过测试");
+                    return false;
+                }
 
                 foreach (var question in chapterTest.Questions)
                 {
@@ -179,6 +192,7 @@ public sealed class XxtRunner
 
                 await chapterTest.SubmitAnswerAsync(cancellationToken);
                 await resolver.ConfirmTestSubmissionAsync(cancellationToken);
+                await chapterTest.WaitForSubmissionAsync(cancellationToken);
                 LogInfo("该章节测试提交成功");
                 await Task.Delay(_settings.ChapterJumpInterval, cancellationToken);
             }
@@ -186,9 +200,11 @@ public sealed class XxtRunner
             {
                 throw;
             }
-            catch (PlaywrightException exception) when (!_page.IsClosed)
+            catch (Exception exception) when (
+                exception is PlaywrightException or TimeoutException && !_page.IsClosed)
             {
-                LogError($"章节测试控件处理失败，已跳过：{exception.Message}");
+                LogError($"章节测试控件处理失败，已停止以避免跳过测试：{exception.Message}");
+                return false;
             }
         }
 
@@ -201,7 +217,18 @@ public sealed class XxtRunner
     {
         await question.LoadAnswersAsync(cancellationToken);
         if (_settings.RandomTest)
+        {
+            if (question.IsFillInBlank)
+                return DisableRandomTest("填空题无法随机选择选项，请启用自动答题或手动填写，当前任务已停止");
+
             return await SelectRandomAnswersAsync(question, cancellationToken);
+        }
+
+        if (question.IsFillInBlank && question.BlankCount == 0)
+            return DisableAutoTest("已识别为填空题，但未找到可填写的答题框，已关闭自动答题");
+
+        if (!question.IsFillInBlank && question.Answers.Count == 0)
+            return DisableAutoTest($"题型 {question.QuestionType ?? "未知"} 未识别到支持的答题控件，请手动处理，已关闭自动答题");
 
         var image = await question.CaptureImageAsync(cancellationToken);
         if (image is null)
@@ -218,22 +245,32 @@ public sealed class XxtRunner
                 : "OCR 识图异常，已关闭自动答题并结束刷课");
         }
 
-        var answer = await _aiControlService.GetAnswer(questionText);
+        var answer = question.IsFillInBlank
+            ? await _aiControlService.GetFillInBlankAnswer(questionText, question.BlankCount)
+            : await _aiControlService.GetAnswer(questionText);
         if (answer is null)
             return DisableAutoTest("AI 配置异常，已关闭自动答题");
 
         LogInfo($"AI 返回答案：{answer.Trim()}");
 
+        if (question.IsFillInBlank)
+        {
+            if (!FillInBlankAnswerParser.TryParse(answer, question.BlankCount, out var blanks))
+                return DisableAutoTest($"填空题答案格式错误或与 {question.BlankCount} 个空不匹配，已关闭自动答题");
+
+            await question.FillBlanksAsync(blanks, cancellationToken);
+            LogInfo($"已填写 {blanks.Count} 个空");
+            return true;
+        }
+
         var selectedCount = 0;
         foreach (var option in question.Answers)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var optionText = await option.Key.InnerTextAsync();
-            var optionMarker = await option.Value.InnerTextAsync();
-            if (!AnswerMatcher.SelectsOption(answer, optionMarker, optionText))
+            if (!AnswerMatcher.SelectsOption(answer, option.Marker, option.Text))
                 continue;
 
-            await option.Key.ClickAsync();
+            await option.Target.ClickAsync();
             selectedCount++;
         }
 
@@ -255,7 +292,7 @@ public sealed class XxtRunner
         foreach (var index in selectedIndexes)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            await answers[index].Key.ClickAsync();
+            await answers[index].Target.ClickAsync();
         }
 
         LogInfo($"已随机选择 {selectedIndexes.Count} 个答案");

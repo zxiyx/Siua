@@ -20,7 +20,26 @@ public class AiControlService
         _logService = logService;
     }
 
-    public async Task<string?> GetAnswer(string question)
+    public Task<string?> GetAnswer(string question) => GetAnswerAsync(
+        question,
+        "你是一个专业答题助手，无论是单选题还是多选题，只告诉我答案即可，比如 ABC、A 等，不要解释");
+
+    public Task<string?> GetFillInBlankAnswer(string question, int blankCount)
+    {
+        if (blankCount <= 0)
+            throw new ArgumentOutOfRangeException(nameof(blankCount));
+
+        return GetAnswerAsync(
+            question,
+            $"你是一个专业答题助手。当前是填空题，共 {blankCount} 个空。" +
+            "请按题目中空格的先后顺序，仅返回 JSON 字符串数组，每个元素对应一个空的答案。" +
+            $"数组必须恰好包含 {blankCount} 个非空字符串。" +
+            "例如两个空返回 [\"第一个空的答案\",\"第二个空的答案\"]。" +
+            "答案中的标点、公式和换行须保留在对应字符串内，不要拆成多个元素。" +
+            "返回每个空的实际答案，不要套用选择题格式，不要添加题号、解释或 Markdown 代码块。");
+    }
+
+    private async Task<string?> GetAnswerAsync(string question, string systemPrompt)
     {
         using var client = CreateClient();
         if (client is null)
@@ -32,7 +51,7 @@ public class AiControlService
         {
             var messages = new List<Message>
             {
-                new(Role.System, "你是一个专业答题助手，无论是单选题还是多选题，只告诉我答案即可，比如 ABC、A 等，不要解释"),
+                new(Role.System, systemPrompt),
                 new(Role.User, question)
             };
             var request = new ChatRequest(messages, _globalSettings.CurrentAi.ModelName, temperature: 0.1, frequencyPenalty: 0);

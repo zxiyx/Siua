@@ -12,8 +12,8 @@ namespace Siua.Core.Xxt;
 public sealed class XxtPageResolver
 {
     private const string MainFrameSelector = "div.course_main > iframe";
-    private const string VideoContainerSelector = "p > div.videoContainer";
-    private const string AttachmentContainerSelector = "p > div.ans-attach-ct:not(.videoContainer)";
+    private const string VideoContainerSelector = "div.videoContainer";
+    private const string AttachmentContainerSelector = "div.ans-attach-ct:not(.videoContainer)";
 
     private readonly IPage _page;
     private readonly GlobalSettings _settings;
@@ -39,6 +39,7 @@ public sealed class XxtPageResolver
     public bool HasVideo => _videos.Count > 0;
     public bool HasTest => _tests.Count > 0;
     public bool HasDoc => _docs.Count > 0;
+    public bool HasResolutionErrors { get; private set; }
 
     public async Task<bool> WaitLoadingAsync()
     {
@@ -48,9 +49,15 @@ public sealed class XxtPageResolver
             await frameLocator.WaitForAsync();
             var frameElement = await frameLocator.ElementHandleAsync();
             _mainFrame = frameElement is null ? null : await frameElement.ContentFrameAsync();
-            return _mainFrame is not null;
+            if (_mainFrame is null)
+            {
+                return false;
+            }
+
+            await WaitForFrameContentAsync(_mainFrame, frameLocator);
+            return true;
         }
-        catch (PlaywrightException)
+        catch (Exception exception) when (exception is PlaywrightException or TimeoutException)
         {
             _mainFrame = null;
             return false;
@@ -62,9 +69,11 @@ public sealed class XxtPageResolver
         _videos.Clear();
         _docs.Clear();
         _tests.Clear();
+        HasResolutionErrors = false;
 
         if (_mainFrame is null)
         {
+            HasResolutionErrors = true;
             return;
         }
 
@@ -82,24 +91,124 @@ public sealed class XxtPageResolver
             var container = attachmentContainers.Nth(index);
             try
             {
-                var document = await new XxtDocumentResolver(container).ResolveAsync();
+                var iframe = container.Locator("iframe").First;
+                await iframe.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Attached });
+                var module = await GetAttachmentModuleAsync(iframe);
+                if (module is "insertbbs" or "downloadfile")
+                {
+                    _logService.AddLog(LogLevel.Info, "Xxt", "检测到讨论或下载附件，已略过");
+                    continue;
+                }
+
+                var jobId = await iframe.GetAttributeAsync("jobid");
+                if (module == "work" || jobId?.StartsWith("work-", StringComparison.OrdinalIgnoreCase) == true)
+                {
+                    _tests.Add(new XxtChapterTest(container));
+                    continue;
+                }
+
+                var isDocumentModule = module is "ppt" or "pdf" or "doc" or "document";
+                if (module.Length > 0 && !isDocumentModule)
+                {
+                    _logService.AddLog(LogLevel.Info, "Xxt", "检测到未支持的附件模块，已略过");
+                    continue;
+                }
+
+                var document = await new XxtDocumentResolver(container).ResolveAsync(isDocumentModule);
                 if (document is not null)
                 {
                     _docs.Add(document);
                 }
-                else
+                else if (await ContainsChapterTestAsync(iframe))
                 {
                     _tests.Add(new XxtChapterTest(container));
                 }
+                else
+                {
+                    _logService.AddLog(LogLevel.Info, "Xxt", "附件中未识别到文档或章节测试，已略过");
+                }
             }
-            catch (PlaywrightException exception)
+            catch (Exception exception) when (exception is PlaywrightException or TimeoutException)
             {
+                HasResolutionErrors = true;
                 _logService.AddLog(
                     LogLevel.Error,
                     "Xxt",
-                    $"任务点解析失败，已跳过：{exception.Message}");
+                    $"任务点解析失败，当前页面仍有未确认任务：{exception.Message}");
             }
         }
+    }
+
+    private static async Task<string> GetAttachmentModuleAsync(ILocator iframe)
+    {
+        var module = await iframe.GetAttributeAsync("module");
+        if (!string.IsNullOrWhiteSpace(module))
+        {
+            return module.Trim().ToLowerInvariant();
+        }
+
+        var source = await iframe.GetAttributeAsync("src") ?? string.Empty;
+        var path = source.Split('?', '#')[0];
+        const string modulePrefix = "/ananas/modules/";
+        var start = path.IndexOf(modulePrefix, StringComparison.OrdinalIgnoreCase);
+        if (start < 0)
+        {
+            return string.Empty;
+        }
+
+        var modulePath = path[(start + modulePrefix.Length)..];
+        var end = modulePath.IndexOf('/');
+        return (end < 0 ? modulePath : modulePath[..end]).ToLowerInvariant();
+    }
+
+    private static async Task<bool> ContainsChapterTestAsync(ILocator iframe, int depth = 0)
+    {
+        var element = await iframe.ElementHandleAsync();
+        var frame = element is null ? null : await element.ContentFrameAsync();
+        if (frame is null)
+        {
+            throw new PlaywrightException("无法进入附件 iframe 以识别章节测试。");
+        }
+
+        await WaitForFrameContentAsync(frame, iframe);
+        if (await frame.Locator("div.CeYan, div.TiMu.newTiMu, div.testTit_status_complete").CountAsync() > 0)
+        {
+            return true;
+        }
+
+        // 兼容没有模块 URL 的旧页面，但不再把任意附件当作章节测试。
+        if (depth < 2)
+        {
+            var innerFrames = frame.Locator("iframe");
+            var count = await innerFrames.CountAsync();
+            for (var index = 0; index < count; index++)
+            {
+                if (await ContainsChapterTestAsync(innerFrames.Nth(index), depth + 1))
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    internal static async Task WaitForFrameContentAsync(IFrame frame, ILocator iframe)
+    {
+        // iframe 元素已出现并不代表它已离开初始的 about:blank 文档。
+        var source = await iframe.GetAttributeAsync("src");
+        if (frame.Url == "about:blank" &&
+            !string.IsNullOrWhiteSpace(source) &&
+            !source.StartsWith("about:", StringComparison.OrdinalIgnoreCase) &&
+            !source.StartsWith("javascript:", StringComparison.OrdinalIgnoreCase))
+        {
+            await frame.WaitForURLAsync(url => url != "about:blank", new FrameWaitForURLOptions
+            {
+                WaitUntil = WaitUntilState.DOMContentLoaded
+            });
+        }
+
+        await frame.WaitForLoadStateAsync(LoadState.DOMContentLoaded);
     }
 
     public async Task ConfirmTestSubmissionAsync(
@@ -114,10 +223,13 @@ public sealed class XxtPageResolver
         });
 
         var submitButton = popup.Locator("#popok").First;
-        if (await submitButton.CountAsync() > 0)
+        await submitButton.WaitForAsync(new LocatorWaitForOptions
         {
-            await submitButton.ClickAsync();
-        }
+            State = WaitForSelectorState.Visible,
+            Timeout = _settings.PopupTimeout
+        });
+        cancellationToken.ThrowIfCancellationRequested();
+        await submitButton.ClickAsync();
     }
 
     public async Task NextPageAsync()
