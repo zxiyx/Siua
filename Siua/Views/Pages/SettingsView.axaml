@@ -120,6 +120,16 @@
                         </Grid>
                         <Separator/>
                         <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="13">
+                            <icons:MaterialIcon Kind="Camera" Width="22" Height="22" Foreground="{DynamicResource SukiLowText}"/>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                <TextBlock Text="区域截图" FontWeight="SemiBold"/>
+                                <TextBlock Text="整份章节测试一次截图、批量答题；关闭时逐题截图" FontSize="12"
+                                           TextWrapping="Wrap" Foreground="{DynamicResource SukiLowText}"/>
+                            </StackPanel>
+                            <ToggleButton Grid.Column="2" Classes="Switch" IsChecked="{Binding Settings.RegionScreenshot, Mode=TwoWay}" VerticalAlignment="Center"/>
+                        </Grid>
+                        <Separator/>
+                        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="13">
                             <icons:MaterialIcon Kind="Tune" Width="22" Height="22" Foreground="{DynamicResource SukiLowText}"/>
                             <StackPanel Grid.Column="1"><TextBlock Text="模型连接设置" FontWeight="SemiBold"/><TextBlock Text="选择服务商并填写 API Key 与模型名称" FontSize="12" Foreground="{DynamicResource SukiLowText}"/></StackPanel>
                             <Button Grid.Column="2" Classes="Flat" Content="配置模型" Command="{Binding ShowAiSettingCommand}"

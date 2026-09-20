@@ -60,12 +60,12 @@ public sealed class Pix2TextService : IDisposable
             {
                 await SaveExecutablePathAsync(existingExecutable);
                 ErrorMessage = null;
-                LogInfo($"Pix2Text 服务组件已安装：{existingExecutable}");
+                LogInstallation("服务组件已安装");
                 return true;
             }
 
             if (existingExecutable is not null)
-                LogInfo("[Pix2Text 安装] 检测到基础包，正在补充 HTTP 服务依赖...");
+                LogInstallation("检测到基础包，正在补充 HTTP 服务依赖...");
 
             var installRoot = GetInstallRoot();
             var runtimeDirectory = Path.Combine(installRoot, "Pix2TextRuntime");
@@ -86,12 +86,12 @@ public sealed class Pix2TextService : IDisposable
                 var pythonRequest = "python.exe";
                 if (await HasSystemPythonAsync(cancellationToken))
                 {
-                    LogInfo("[Pix2Text 安装] 检测到现有 Python，直接使用");
+                    LogInstallation("检测到现有 Python，直接使用");
                 }
                 else
                 {
                     pythonRequest = "3.11";
-                    LogInfo("[Pix2Text 安装] 未找到 Python，准备 Python 3.11...");
+                    LogInstallation("未找到 Python，准备 Python 3.11...");
                     if (await RunUvAsync(
                             installRoot,
                             environment,
@@ -102,7 +102,7 @@ public sealed class Pix2TextService : IDisposable
                     }
                 }
 
-                LogInfo("[Pix2Text 安装] 创建独立运行环境...");
+                LogInstallation("创建独立运行环境...");
                 if (await RunUvAsync(
                         installRoot,
                         environment,
@@ -113,7 +113,7 @@ public sealed class Pix2TextService : IDisposable
                 }
             }
 
-            LogInfo("[Pix2Text 安装] 安装或更新 Pix2Text，下载模型依赖可能需要一些时间...");
+            LogInstallation("安装或更新 Pix2Text，下载依赖可能需要一些时间...");
             if (await RunUvAsync(
                     installRoot,
                     environment,
@@ -128,25 +128,25 @@ public sealed class Pix2TextService : IDisposable
 
             await SaveExecutablePathAsync(pix2TextExecutable);
             ErrorMessage = null;
-            LogInfo("Pix2Text 安装完成，可以点击“启动 Pix2Text”");
+            LogInstallation("安装完成，可以点击“启动 Pix2Text”");
             return true;
         }
         catch (OperationCanceledException)
         {
             ErrorMessage = "Pix2Text 安装已取消";
-            LogInfo(ErrorMessage);
+            LogInstallation("安装已取消");
             return false;
         }
         catch (Win32Exception exception)
         {
             ErrorMessage = "未找到 uv，请先安装 uv 并确保 uv.exe 已加入 PATH";
-            LogError($"{ErrorMessage}：{exception.Message}");
+            LogInstallation($"{ErrorMessage}：{exception.Message}", LogLevel.Error);
             return false;
         }
         catch (Exception exception)
         {
             ErrorMessage = exception.Message;
-            LogError($"Pix2Text 安装失败：{exception.Message}");
+            LogInstallation($"安装失败：{exception.Message}", LogLevel.Error);
             return false;
         }
         finally
@@ -219,16 +219,10 @@ public sealed class Pix2TextService : IDisposable
                 EnableRaisingEvents = true
             };
             AddProcessArguments(process.StartInfo, listenAddress, _settings.Pix2TextPort);
-            process.OutputDataReceived += (_, e) =>
-            {
-                if (!string.IsNullOrWhiteSpace(e.Data))
-                    LogInfo(e.Data);
-            };
-            process.ErrorDataReceived += (_, e) =>
-            {
-                if (!string.IsNullOrWhiteSpace(e.Data))
-                    LogProcessOutput(e.Data);
-            };
+            // 服务可能在 stdout/stderr 输出完整识别内容。仅排空管道，
+            // 由下方的就绪检查和识别请求报告状态、退出码及 HTTP 错误。
+            process.OutputDataReceived += (_, _) => { };
+            process.ErrorDataReceived += (_, _) => { };
             _process = process;
             process.Start();
             process.BeginOutputReadLine();
@@ -300,20 +294,26 @@ public sealed class Pix2TextService : IDisposable
 
             using var response = await _httpClient.PostAsync(
                 new Uri(serviceUri, "pix2text"), form, cancellationToken);
-            var json = await response.Content.ReadAsStringAsync(cancellationToken);
             if (!response.IsSuccessStatusCode)
             {
-                ErrorMessage =
-                    $"HTTP {(int)response.StatusCode} ({response.ReasonPhrase})：{json}";
+                // 错误响应也可能回显题目或识别结果，不将响应正文写入日志。
+                ErrorMessage = $"HTTP {(int)response.StatusCode}";
                 LogError($"Pix2Text 识别失败：{ErrorMessage}");
                 return null;
             }
 
+            var json = await response.Content.ReadAsStringAsync(cancellationToken);
             return ExtractText(json);
         }
         catch (OperationCanceledException)
         {
             throw;
+        }
+        catch (JsonException)
+        {
+            ErrorMessage = "识别服务返回的数据格式无效";
+            LogError($"Pix2Text 识别失败：{ErrorMessage}");
+            return null;
         }
         catch (Exception ex)
         {
@@ -567,7 +567,7 @@ public sealed class Pix2TextService : IDisposable
     private bool InstallationFailed(string message)
     {
         ErrorMessage = message;
-        LogError(message);
+        LogInstallation(message, LogLevel.Error);
         return false;
     }
 
@@ -693,7 +693,7 @@ public sealed class Pix2TextService : IDisposable
         while (await reader.ReadLineAsync() is { } line)
         {
             if (!string.IsNullOrWhiteSpace(line))
-                LogInfo($"[安装] {line}");
+                LogInstallation(line.Trim());
         }
     }
 
@@ -831,19 +831,8 @@ public sealed class Pix2TextService : IDisposable
     private void LogError(string message) =>
         _logService.AddLog(LogLevel.Error, LogSource, message);
 
-    private void LogProcessOutput(string message)
-    {
-        if (message.Contains("Traceback", StringComparison.OrdinalIgnoreCase) ||
-            message.Contains("ERROR", StringComparison.OrdinalIgnoreCase) ||
-            message.Contains("Exception", StringComparison.OrdinalIgnoreCase))
-        {
-            LogError(message);
-        }
-        else
-        {
-            LogInfo(message);
-        }
-    }
+    private void LogInstallation(string message, LogLevel level = LogLevel.Info) =>
+        _logService.AddLog(level, LogSource, $"[Pix2Text]安装] {message}");
 
     public void Dispose()
     {

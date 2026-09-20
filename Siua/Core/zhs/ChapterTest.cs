@@ -4,6 +4,7 @@ using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Playwright;
+using Siua.Core;
 
 namespace Siua.Core.Zhs;
 
@@ -101,6 +102,31 @@ public sealed class ZhsChapterTest
         var question = new ZhsQuestion(container);
         await question.LoadAsync(cancellationToken);
         return question;
+    }
+
+    public async Task<IReadOnlyList<ZhsQuestion>> LoadAllQuestionsAsync(IPage examPage,
+        CancellationToken cancellationToken = default)
+    {
+        var containers = examPage.Locator(QuestionSelector);
+        var count = await containers.CountAsync();
+        var questions = new List<ZhsQuestion>(count);
+        for (var index = 0; index < count; index++)
+        {
+            var question = new ZhsQuestion(containers.Nth(index));
+            await question.LoadAsync(cancellationToken);
+            questions.Add(question);
+        }
+        return questions;
+    }
+
+    public Task<byte[]> CaptureRegionAsync(IPage examPage, int questionCount,
+        CancellationToken cancellationToken = default)
+    {
+        // 最近的共同祖先包含全卷题目，避免只截到当前分页中可见的一题。
+        var region = examPage.Locator(QuestionSelector).First.Locator(
+            "xpath=ancestor::*[count(.//div[contains(concat(' ', normalize-space(@class), ' '), ' examPaper_subject ') " +
+            $"and contains(concat(' ', normalize-space(@class), ' '), ' mt20 ')]) = {questionCount}][1]");
+        return ChapterRegionCapture.CaptureAsync(examPage.MainFrame, region, cancellationToken, QuestionSelector);
     }
 
     public async Task<bool> MoveNextOrSaveAsync(
@@ -262,6 +288,7 @@ public sealed class ZhsQuestion
         Type = ZhsChapterTest.NormalizeText(
             await ZhsChapterTest.TryGetInnerTextAsync(
                 _container.Locator("span.subject_type").First) ?? string.Empty);
+        AllowsMultipleAnswers = Type.Contains("多选", StringComparison.Ordinal);
 
         var optionRows = _container.Locator("div.subject_node div.nodeLab");
         var optionCount = await optionRows.CountAsync();

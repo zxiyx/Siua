@@ -178,16 +178,21 @@ public sealed class XxtRunner
                     return false;
                 }
 
-                foreach (var question in chapterTest.Questions)
+                if (_settings.RegionScreenshot && !_settings.RandomTest)
                 {
-                    if (!await AnswerQuestionAsync(
-                            question,
-                            cancellationToken))
-                    {
+                    if (!await AnswerChapterAsync(chapterTest, cancellationToken))
                         return false;
-                    }
-
                     await Task.Delay(_settings.AiAnsweringInterval, cancellationToken);
+                }
+                else
+                {
+                    for (var index = 0; index < chapterTest.Questions.Count; index++)
+                    {
+                        if (!await AnswerQuestionAsync(chapterTest.Questions[index], index + 1, cancellationToken))
+                            return false;
+                        if (!_settings.RandomTest)
+                            await Task.Delay(_settings.AiAnsweringInterval, cancellationToken);
+                    }
                 }
 
                 await chapterTest.SubmitAnswerAsync(cancellationToken);
@@ -213,13 +218,20 @@ public sealed class XxtRunner
 
     private async Task<bool> AnswerQuestionAsync(
         XxtQuestion question,
+        int questionIndex,
         CancellationToken cancellationToken)
     {
         await question.LoadAnswersAsync(cancellationToken);
         if (_settings.RandomTest)
         {
             if (question.IsFillInBlank)
-                return DisableRandomTest("填空题无法随机选择选项，请启用自动答题或手动填写，当前任务已停止");
+            {
+                if (question.BlankCount == 0)
+                    return DisableRandomTest("未识别到填空题答题框，已关闭随机答题");
+                await question.FillBlanksAsync(RandomAnswerSelector.FillBlanks(question.BlankCount), cancellationToken);
+                LogInfo($"已随机填写 {question.BlankCount} 个空（汉字或数字）");
+                return true;
+            }
 
             return await SelectRandomAnswersAsync(question, cancellationToken);
         }
@@ -251,7 +263,13 @@ public sealed class XxtRunner
         if (answer is null)
             return DisableAutoTest("AI 配置异常，已关闭自动答题");
 
-        LogInfo($"AI 返回答案：{answer.Trim()}");
+        LogInfo(AnswerLogFormatter.Format(question.Number, questionIndex, answer, question.BlankCount));
+
+        return await ApplyAnswerAsync(question, answer, cancellationToken);
+    }
+
+    private async Task<bool> ApplyAnswerAsync(XxtQuestion question, string answer, CancellationToken cancellationToken)
+    {
 
         if (question.IsFillInBlank)
         {
@@ -259,7 +277,6 @@ public sealed class XxtRunner
                 return DisableAutoTest($"填空题答案格式错误或与 {question.BlankCount} 个空不匹配，已关闭自动答题");
 
             await question.FillBlanksAsync(blanks, cancellationToken);
-            LogInfo($"已填写 {blanks.Count} 个空");
             return true;
         }
 
@@ -276,6 +293,56 @@ public sealed class XxtRunner
 
         return selectedCount > 0 ||
                DisableAutoTest("AI 返回的答案无法匹配任何选项，已关闭自动答题");
+    }
+
+    private async Task<bool> AnswerChapterAsync(XxtChapterTest chapterTest, CancellationToken cancellationToken)
+    {
+        var specs = new List<ChapterQuestionSpec>();
+        foreach (var question in chapterTest.Questions)
+        {
+            await question.LoadAnswersAsync(cancellationToken);
+            if ((question.IsFillInBlank && question.BlankCount == 0) ||
+                (!question.IsFillInBlank && question.Answers.Count == 0))
+                return DisableAutoTest($"区域截图发现第 {specs.Count + 1} 题的题型或答题控件不受支持，已停止答题");
+            specs.Add(new ChapterQuestionSpec(specs.Count + 1, question.Number, question.BlankCount,
+                question.AllowsMultipleAnswers, question.Answers.Select(option => option.Marker).ToArray()));
+        }
+
+        LogInfo($"区域截图：一次识别并回答 {specs.Count} 道学习通章节测试题");
+        var image = await chapterTest.CaptureRegionAsync(cancellationToken);
+        string? response;
+        if (_settings.UsedAiToOcr)
+            response = await _aiControlService.GetChapterAnswers(image, specs);
+        else
+        {
+            var text = await _ocrService.RecognizeAsync(image, cancellationToken);
+            if (string.IsNullOrWhiteSpace(text))
+                return DisableAutoTest("章节测试区域 OCR 识别失败，已关闭自动答题");
+            response = await _aiControlService.GetChapterAnswers(text, specs);
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        if (!ChapterAnswerParser.TryParse(response, specs, out var answers))
+            return DisableAutoTest("整份试卷答案格式、题号、选项或空数不匹配，未填写或提交，已关闭自动答题");
+
+        for (var index = 0; index < chapterTest.Questions.Count; index++)
+        {
+            var question = chapterTest.Questions[index];
+            var values = answers[index + 1];
+            LogInfo(AnswerLogFormatter.Format(question.Number, index + 1, values, question.IsFillInBlank));
+            if (question.IsFillInBlank)
+                await question.FillBlanksAsync(values, cancellationToken);
+            else
+            {
+                foreach (var option in question.Answers.Where(option => values.Contains(option.Marker)))
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    await option.Target.ClickAsync();
+                }
+            }
+        }
+        LogInfo($"已批量填写 {specs.Count} 道题");
+        return true;
     }
 
     private async Task<bool> SelectRandomAnswersAsync(

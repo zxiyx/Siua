@@ -4,6 +4,8 @@ using System.Threading.Tasks;
 using OpenAI;
 using OpenAI.Chat;
 using Siua.Common;
+using Siua.Core;
+using System.Text.Json;
 using Siua.Interfaces;
 
 namespace Siua.Services;
@@ -39,7 +41,22 @@ public class AiControlService
             "返回每个空的实际答案，不要套用选择题格式，不要添加题号、解释或 Markdown 代码块。");
     }
 
-    private async Task<string?> GetAnswerAsync(string question, string systemPrompt)
+    public Task<string?> GetChapterAnswers(string text, IReadOnlyList<ChapterQuestionSpec> questions) =>
+        GetAnswerAsync(text, ChapterPrompt(questions));
+
+    public Task<string?> GetChapterAnswers(byte[] image, IReadOnlyList<ChapterQuestionSpec> questions) =>
+        GetAnswerAsync("请回答这张完整章节测试截图中的全部题目。", ChapterPrompt(questions), image);
+
+    private static string ChapterPrompt(IReadOnlyList<ChapterQuestionSpec> questions) =>
+        "你是一个专业答题助手。请回答整份章节测试，题目按截图或识别文本从上到下排列。" +
+        "仅返回 JSON 数组，每题一个对象，例如 [{\"index\":1,\"answers\":[\"A\"]},{\"index\":2,\"answers\":[\"甲\",\"乙\"]}]。" +
+        "index 必须使用下面清单中的 Index（全卷顺序），不能把可能重复的页面题号 Number 当作 index。" +
+        "BlankCount>0 表示填空题，每空对应 answers 中一个非空字符串，按空的顺序填写实际答案。" +
+        "否则为选择题，answers 只能使用 Options 列出的标号，Multiple=false 时恰好选择一个。" +
+        "不得漏题、重复题号或添加说明；答案中的逗号、公式、换行保留在同一个字符串内。题目清单：" +
+        JsonSerializer.Serialize(questions);
+
+    private async Task<string?> GetAnswerAsync(string question, string systemPrompt, byte[]? image = null)
     {
         using var client = CreateClient();
         if (client is null)
@@ -52,7 +69,13 @@ public class AiControlService
             var messages = new List<Message>
             {
                 new(Role.System, systemPrompt),
-                new(Role.User, question)
+                image is null
+                    ? new Message(Role.User, question)
+                    : new Message(Role.User, new List<Content>
+                    {
+                        question,
+                        new ImageUrl($"image/png;base64,{Convert.ToBase64String(image)}")
+                    })
             };
             var request = new ChatRequest(messages, _globalSettings.CurrentAi.ModelName, temperature: 0.1, frequencyPenalty: 0);
             var response = await client.ChatEndpoint.GetCompletionAsync(request);

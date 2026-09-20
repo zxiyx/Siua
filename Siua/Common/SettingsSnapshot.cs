@@ -20,6 +20,7 @@ internal sealed class SettingsSnapshot
     public int PopupTimeout { get; set; } = 1500;
     public double VideoPlayRate { get; set; } = 1.0;
     public bool UsedAiToOcr { get; set; }
+    public bool RegionScreenshot { get; set; }
     public bool AutoTest { get; set; }
     public bool RandomTest { get; set; }
     public Dictionary<string, string[]> CoursesByPlatform { get; set; } = [];

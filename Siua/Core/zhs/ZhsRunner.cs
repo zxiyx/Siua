@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Playwright;
@@ -186,8 +187,17 @@ public sealed class ZhsRunner
                 return DisableAutoTest("未识别到智慧树章节测试题目，已关闭自动答题");
 
             LogInfo($"检测到 {questionCount} 道智慧树章节测试题");
+            IReadOnlyDictionary<string, IReadOnlyList<string>>? chapterAnswers = null;
+            if (_settings.RegionScreenshot && !_settings.RandomTest)
+            {
+                chapterAnswers = await AnswerChapterAsync(chapterTest, examPage, questionCount, cancellationToken);
+                if (chapterAnswers is null)
+                    return false;
+                await Task.Delay(_settings.AiAnsweringInterval, cancellationToken);
+            }
             var processedCount = 0;
             var previousQuestionKey = string.Empty;
+            var processedKeys = new HashSet<string>(StringComparer.Ordinal);
             for (var index = 0; index < questionCount; index++)
             {
                 cancellationToken.ThrowIfCancellationRequested();
@@ -198,23 +208,29 @@ public sealed class ZhsRunner
                     string.Equals(
                         question.Key,
                         previousQuestionKey,
-                        StringComparison.Ordinal))
+                        StringComparison.Ordinal) || !processedKeys.Add(question.Key))
                 {
                     return DisableAutoTest("智慧树章节测试未能切换到下一题，已关闭自动答题");
                 }
 
                 previousQuestionKey = question.Key;
-                LogInfo(
-                    $"识别并回答智慧树章节测试第 {index + 1}/{questionCount} 题...");
-                if (!await AnswerQuestionAsync(
-                        question,
-                        cancellationToken))
+                if (chapterAnswers is not null)
                 {
-                    return false;
+                    if (!chapterAnswers.TryGetValue(question.Key, out var answers))
+                        return DisableAutoTest("区域截图后的题目发生变化，已停止答题");
+                    var selected = question.Answers.Where(option => answers.Contains(option.Marker)).ToArray();
+                    if (selected.Length != answers.Count)
+                        return DisableAutoTest("区域截图后的选项发生变化，已停止答题");
+                    LogInfo(AnswerLogFormatter.Format(question.Number, index + 1, answers));
+                    foreach (var option in selected)
+                        await option.SelectAsync(cancellationToken);
                 }
+                else if (!await AnswerQuestionAsync(question, index + 1, cancellationToken))
+                    return false;
 
                 processedCount++;
-                await Task.Delay(_settings.AiAnsweringInterval, cancellationToken);
+                if (chapterAnswers is null && !_settings.RandomTest)
+                    await Task.Delay(_settings.AiAnsweringInterval, cancellationToken);
                 var hasNextQuestion = await chapterTest.MoveNextOrSaveAsync(
                     examPage,
                     question.Key,
@@ -267,6 +283,7 @@ public sealed class ZhsRunner
 
     private async Task<bool> AnswerQuestionAsync(
         ZhsQuestion question,
+        int questionIndex,
         CancellationToken cancellationToken)
     {
         if (_settings.RandomTest)
@@ -290,7 +307,7 @@ public sealed class ZhsRunner
         if (string.IsNullOrWhiteSpace(answer))
             return DisableAutoTest("AI 配置或回答异常，已关闭智慧树自动答题");
 
-        LogInfo($"AI 返回答案：{answer.Trim()}");
+        LogInfo(AnswerLogFormatter.Format(question.Number, questionIndex, answer));
         var selectedCount = 0;
         foreach (var option in question.Answers)
         {
@@ -306,6 +323,45 @@ public sealed class ZhsRunner
 
         return selectedCount > 0 ||
                DisableAutoTest("AI 返回的答案无法匹配智慧树题目选项，已关闭自动答题");
+    }
+
+    private async Task<IReadOnlyDictionary<string, IReadOnlyList<string>>?> AnswerChapterAsync(
+        ZhsChapterTest chapterTest, IPage examPage, int questionCount, CancellationToken cancellationToken)
+    {
+        var questions = await chapterTest.LoadAllQuestionsAsync(examPage, cancellationToken);
+        if (questions.Count != questionCount || questions.Any(question =>
+                string.IsNullOrWhiteSpace(question.Key) || question.Answers.Count == 0) ||
+            questions.Select(question => question.Key).Distinct().Count() != questionCount)
+        {
+            DisableAutoTest("智慧树整份试卷尚未完整加载或含不支持的题型，已停止区域截图答题");
+            return null;
+        }
+        var specs = questions.Select((question, index) => new ChapterQuestionSpec(
+            index + 1, question.Number, 0, question.AllowsMultipleAnswers,
+            question.Answers.Select(option => option.Marker).ToArray())).ToArray();
+        LogInfo($"区域截图：一次识别并回答 {questionCount} 道智慧树章节测试题");
+        var image = await chapterTest.CaptureRegionAsync(examPage, questionCount, cancellationToken);
+        string? response;
+        if (_settings.UsedAiToOcr)
+            response = await _aiControlService.GetChapterAnswers(image, specs);
+        else
+        {
+            var text = await _ocrService.RecognizeAsync(image, cancellationToken);
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                DisableAutoTest("智慧树章节测试区域 OCR 识别失败，已停止答题");
+                return null;
+            }
+            response = await _aiControlService.GetChapterAnswers(text, specs);
+        }
+        cancellationToken.ThrowIfCancellationRequested();
+        if (!ChapterAnswerParser.TryParse(response, specs, out var answers))
+        {
+            DisableAutoTest("智慧树整份试卷答案的题号或选项不匹配，未填写或提交，已停止答题");
+            return null;
+        }
+        return questions.Select((question, index) => (question.Key, Answers: answers[index + 1]))
+            .ToDictionary(item => item.Key, item => item.Answers, StringComparer.Ordinal);
     }
 
     private async Task<bool> SelectRandomAnswersAsync(
@@ -330,6 +386,9 @@ public sealed class ZhsRunner
 
     private bool DisableAutoTest(string message)
     {
+        // 章节加载、切题、提交等共用流程也可能由随机答题触发。
+        if (_settings.RandomTest)
+            return DisableRandomTest(message.Replace("自动答题", "随机答题", StringComparison.Ordinal));
         _settings.AutoTest = false;
         LogError(message);
         return false;

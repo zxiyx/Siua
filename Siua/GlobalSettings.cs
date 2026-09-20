@@ -41,6 +41,7 @@ public partial class GlobalSettings : ObservableObject, IDisposable
     [ObservableProperty] private int _popupTimeout = 1500;
     [ObservableProperty] private double _videoPlayRate = 1.0;
     [ObservableProperty] private bool _usedAiToOcr;
+    [ObservableProperty] private bool _regionScreenshot;
     [ObservableProperty] private bool _autoTest;
     [ObservableProperty] private bool _randomTest;
 
@@ -251,6 +252,7 @@ public partial class GlobalSettings : ObservableObject, IDisposable
         PopupTimeout = PopupTimeout,
         VideoPlayRate = VideoPlayRate,
         UsedAiToOcr = UsedAiToOcr,
+        RegionScreenshot = RegionScreenshot,
         AutoTest = AutoTest,
         RandomTest = RandomTest,
         CoursesByPlatform = _coursesByPlatform.ToDictionary(
@@ -303,6 +305,7 @@ public partial class GlobalSettings : ObservableObject, IDisposable
             ? snapshot.VideoPlayRate
             : 1.0;
         UsedAiToOcr = snapshot.UsedAiToOcr;
+        RegionScreenshot = snapshot.RegionScreenshot;
         AutoTest = snapshot.AutoTest;
         RandomTest = snapshot.RandomTest;
 

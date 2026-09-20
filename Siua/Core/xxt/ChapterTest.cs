@@ -23,6 +23,13 @@ public sealed class XxtChapterTest
     public bool IsCompleted { get; private set; }
     public bool HasQuestion => _questions.Count > 0;
 
+    public Task<byte[]> CaptureRegionAsync(CancellationToken cancellationToken = default)
+    {
+        if (_testFrame is null || _testPanel is null)
+            throw new PlaywrightException("章节测试尚未加载，无法截图。");
+        return ChapterRegionCapture.CaptureAsync(_testFrame, _testPanel.Locator("form #ZyBottom"), cancellationToken);
+    }
+
     public async Task SubmitAnswerAsync(CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -120,6 +127,7 @@ public sealed class XxtQuestion
     }
 
     public string Title { get; private set; } = string.Empty;
+    public string Number { get; private set; } = string.Empty;
     public bool AllowsMultipleAnswers { get; private set; }
     public string? QuestionType { get; private set; }
     public bool IsFillInBlank { get; private set; }
@@ -136,6 +144,8 @@ public sealed class XxtQuestion
         var titleLocator = _container.Locator("div.Zy_TItle.clearfix").First;
         await titleLocator.WaitForAsync();
         Title = await titleLocator.InnerTextAsync();
+        var number = titleLocator.Locator("i").First;
+        Number = await number.CountAsync() > 0 ? (await number.InnerTextAsync()).Trim() : string.Empty;
 
         // 学习通题型 2 为填空题。题型字段缺失时再使用题干中的题型提示，
         // 避免把问答题、编辑器工具栏中的输入框当作填空。

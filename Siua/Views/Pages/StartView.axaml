@@ -174,7 +174,7 @@
                     <Grid ColumnDefinitions="*,Auto">
                         <StackPanel>
                             <TextBlock Text="随机答题" FontWeight="SemiBold"/>
-                            <TextBlock Text="无需配置 AI 模型，随机选择答案"
+                            <TextBlock Text="无需配置 AI，随机选择答案；学习通填空随机填汉字或数字" TextWrapping="Wrap"
                                        FontSize="12" Foreground="{DynamicResource SukiLowText}"/>
                         </StackPanel>
                         <ToggleButton Grid.Column="1" Classes="Switch"
