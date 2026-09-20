@@ -37,6 +37,7 @@ public partial class StartViewModel :PageBase
     private GlobalSettings _settings;
     private readonly ICoreService _coreService;
     private readonly Pix2TextService _pix2TextService;
+    private readonly PageNavigationService _pageNavigationService;
     private readonly Dictionary<string, string> _selectedCourseByPlatform =
         new(StringComparer.Ordinal);
     private ObservableCollection<string> _observedCourses;
@@ -53,7 +54,8 @@ public partial class StartViewModel :PageBase
     public string RunButtonText => IsRunning
         ? _mainLoopRunning ? "停止任务" : "正在停止"
         : "启动学习";
-    public StartViewModel(GlobalSettings globalSettings,ICoreService coreService,Pix2TextService pix2TextService) : base("开始", MaterialIconKind.Application, 0)
+    public StartViewModel(GlobalSettings globalSettings,ICoreService coreService,Pix2TextService pix2TextService,
+        PageNavigationService pageNavigationService) : base("开始", MaterialIconKind.Application, 0)
     {
         _settings = globalSettings;
         _selectedPlatform = LearningPlatformCatalog.IsSupported(globalSettings.CurrentPlatform)
@@ -63,6 +65,7 @@ public partial class StartViewModel :PageBase
             globalSettings.CurrentPlatform = _selectedPlatform;
         _coreService = coreService;
         _pix2TextService = pix2TextService;
+        _pageNavigationService = pageNavigationService;
         _observedCourses = Settings.Courses;
         _observedCourses.CollectionChanged += OnCoursesChanged;
         Settings.PropertyChanged += OnSettingsPropertyChanged;
@@ -120,6 +123,7 @@ public partial class StartViewModel :PageBase
         IsRunning = true;
         try
         {
+            _pageNavigationService.RequestNavigation<LogViewModel>();
             if (!await _coreService.LoadPlaywright(courseUrl))
                 return;
 

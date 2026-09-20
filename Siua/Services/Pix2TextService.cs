@@ -54,13 +54,14 @@ public sealed class Pix2TextService : IDisposable
         await _installLock.WaitAsync(cancellationToken);
         try
         {
+            LogInstallation("正在检测 Pix2Text 是否已安装...");
             var existingExecutable = ResolveExecutablePath();
             if (existingExecutable is not null &&
                 await HasServeDependenciesAsync(existingExecutable, cancellationToken))
             {
                 await SaveExecutablePathAsync(existingExecutable);
                 ErrorMessage = null;
-                LogInstallation("服务组件已安装");
+                LogInstallation("已安装Pix2Text");
                 return true;
             }
 
@@ -832,7 +833,7 @@ public sealed class Pix2TextService : IDisposable
         _logService.AddLog(LogLevel.Error, LogSource, message);
 
     private void LogInstallation(string message, LogLevel level = LogLevel.Info) =>
-        _logService.AddLog(level, LogSource, $"[Pix2Text]安装] {message}");
+        _logService.AddLog(level, LogSource, $"[Pix2Text安装] {message}");
 
     public void Dispose()
     {

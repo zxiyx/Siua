@@ -162,7 +162,7 @@
                     <Grid ColumnDefinitions="*,Auto">
                         <StackPanel>
                             <TextBlock Text="自动答题" FontWeight="SemiBold"/>
-                            <TextBlock Text="使用已配置的 AI 模型分析并选择答案"
+                            <TextBlock Text="使用已配置的 AI 模型分析并给出答案"
                                        FontSize="12" Foreground="{DynamicResource SukiLowText}"/>
                         </StackPanel>
                         <ToggleButton Grid.Column="1" Classes="Switch"
@@ -174,7 +174,7 @@
                     <Grid ColumnDefinitions="*,Auto">
                         <StackPanel>
                             <TextBlock Text="随机答题" FontWeight="SemiBold"/>
-                            <TextBlock Text="无需配置 AI，随机选择答案；学习通填空随机填汉字或数字" TextWrapping="Wrap"
+                            <TextBlock Text="无需配置 AI，随机选择答案；填空随机填汉字或数字" TextWrapping="Wrap"
                                        FontSize="12" Foreground="{DynamicResource SukiLowText}"/>
                         </StackPanel>
                         <ToggleButton Grid.Column="1" Classes="Switch"
