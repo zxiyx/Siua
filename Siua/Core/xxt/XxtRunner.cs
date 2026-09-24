@@ -224,6 +224,12 @@ public sealed class XxtRunner
         await question.LoadAnswersAsync(cancellationToken);
         if (_settings.RandomTest)
         {
+            if (question.IsTextAnswer)
+            {
+                await question.FillTextAnswerAsync(RandomAnswerSelector.FillBlanks(1)[0], cancellationToken);
+                LogInfo("已随机填写其它题文本答案（汉字或数字）");
+                return true;
+            }
             if (question.IsFillInBlank)
             {
                 if (question.BlankCount == 0)
@@ -239,7 +245,7 @@ public sealed class XxtRunner
         if (question.IsFillInBlank && question.BlankCount == 0)
             return DisableAutoTest("已识别为填空题，但未找到可填写的答题框，已关闭自动答题");
 
-        if (!question.IsFillInBlank && question.Answers.Count == 0)
+        if (!question.IsFillInBlank && !question.IsTextAnswer && question.Answers.Count == 0)
             return DisableAutoTest($"题型 {question.QuestionType ?? "未知"} 未识别到支持的答题控件，请手动处理，已关闭自动答题");
 
         var image = await question.CaptureImageAsync(cancellationToken);
@@ -257,10 +263,12 @@ public sealed class XxtRunner
                 : "OCR 识图异常，已关闭自动答题并结束刷课");
         }
 
-        var answer = question.IsFillInBlank
+        var answer = question.IsTextAnswer
+            ? await _aiControlService.GetTextAnswer(questionText)
+            : question.IsFillInBlank
             ? await _aiControlService.GetFillInBlankAnswer(questionText, question.BlankCount)
             : await _aiControlService.GetAnswer(questionText);
-        if (answer is null)
+        if (string.IsNullOrWhiteSpace(answer))
             return DisableAutoTest("AI 配置异常，已关闭自动答题");
 
         LogInfo(AnswerLogFormatter.Format(question.Number, questionIndex, answer, question.BlankCount));
@@ -270,7 +278,11 @@ public sealed class XxtRunner
 
     private async Task<bool> ApplyAnswerAsync(XxtQuestion question, string answer, CancellationToken cancellationToken)
     {
-
+        if (question.IsTextAnswer)
+        {
+            await question.FillTextAnswerAsync(answer, cancellationToken);
+            return true;
+        }
         if (question.IsFillInBlank)
         {
             if (!FillInBlankAnswerParser.TryParse(answer, question.BlankCount, out var blanks))
@@ -302,10 +314,11 @@ public sealed class XxtRunner
         {
             await question.LoadAnswersAsync(cancellationToken);
             if ((question.IsFillInBlank && question.BlankCount == 0) ||
-                (!question.IsFillInBlank && question.Answers.Count == 0))
+                (question.IsTextAnswer && question.TextAnswerInputCount != 1) ||
+                (!question.IsFillInBlank && !question.IsTextAnswer && question.Answers.Count == 0))
                 return DisableAutoTest($"区域截图发现第 {specs.Count + 1} 题的题型或答题控件不受支持，已停止答题");
             specs.Add(new ChapterQuestionSpec(specs.Count + 1, question.Number, question.BlankCount,
-                question.AllowsMultipleAnswers, question.Answers.Select(option => option.Marker).ToArray()));
+                question.AllowsMultipleAnswers, question.Answers.Select(option => option.Marker).ToArray(), question.IsTextAnswer));
         }
 
         LogInfo($"区域截图：一次识别并回答 {specs.Count} 道学习通章节测试题");
@@ -330,7 +343,9 @@ public sealed class XxtRunner
             var question = chapterTest.Questions[index];
             var values = answers[index + 1];
             LogInfo(AnswerLogFormatter.Format(question.Number, index + 1, values, question.IsFillInBlank));
-            if (question.IsFillInBlank)
+            if (question.IsTextAnswer)
+                await question.FillTextAnswerAsync(values[0], cancellationToken);
+            else if (question.IsFillInBlank)
                 await question.FillBlanksAsync(values, cancellationToken);
             else
             {

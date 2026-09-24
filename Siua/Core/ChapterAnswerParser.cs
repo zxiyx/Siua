@@ -7,7 +7,8 @@ namespace Siua.Core;
 
 /// <summary>Index 是截图中从上到下的顺序，不依赖可能重复的页面题号。</summary>
 public sealed record ChapterQuestionSpec(
-    int Index, string Number, int BlankCount, bool Multiple, IReadOnlyList<string> Options);
+    int Index, string Number, int BlankCount, bool Multiple, IReadOnlyList<string> Options,
+    bool IsTextAnswer = false);
 
 internal static class ChapterAnswerParser
 {
@@ -56,7 +57,12 @@ internal static class ChapterAnswerParser
                     entries.Add(value.GetString()!.Trim());
                 }
 
-                if (spec.BlankCount > 0)
+                if (spec.IsTextAnswer)
+                {
+                    if (entries.Count != 1)
+                        return false;
+                }
+                else if (spec.BlankCount > 0)
                 {
                     if (entries.Count != spec.BlankCount)
                         return false;

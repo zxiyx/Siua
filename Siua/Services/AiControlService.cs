@@ -44,6 +44,11 @@ public class AiControlService
     public Task<string?> GetChapterAnswers(string text, IReadOnlyList<ChapterQuestionSpec> questions) =>
         GetAnswerAsync(text, ChapterPrompt(questions));
 
+    public Task<string?> GetTextAnswer(string question) => GetAnswerAsync(
+        question,
+        "你是一个专业答题助手。当前是需要完整文本作答的其它题。请依据题干要求直接返回可填写的答案正文。" +
+        "保留必要的说明、标点、公式和段落换行，不要套用选择题字母或填空数组格式，不要添加题号、开场白或 Markdown 代码块。");
+
     public Task<string?> GetChapterAnswers(byte[] image, IReadOnlyList<ChapterQuestionSpec> questions) =>
         GetAnswerAsync("请回答这张完整章节测试截图中的全部题目。", ChapterPrompt(questions), image);
 
@@ -51,8 +56,9 @@ public class AiControlService
         "你是一个专业答题助手。请回答整份章节测试，题目按截图或识别文本从上到下排列。" +
         "仅返回 JSON 数组，每题一个对象，例如 [{\"index\":1,\"answers\":[\"A\"]},{\"index\":2,\"answers\":[\"甲\",\"乙\"]}]。" +
         "index 必须使用下面清单中的 Index（全卷顺序），不能把可能重复的页面题号 Number 当作 index。" +
-        "BlankCount>0 表示填空题，每空对应 answers 中一个非空字符串，按空的顺序填写实际答案。" +
-        "否则为选择题，answers 只能使用 Options 列出的标号，Multiple=false 时恰好选择一个。" +
+        "IsTextAnswer=true 表示其它文本题，answers 必须恰好包含一个非空字符串，内容为按题干要求作答的完整答案正文。" +
+        "IsTextAnswer=false 且 BlankCount>0 表示填空题，每空对应 answers 中一个非空字符串，按空的顺序填写实际答案。" +
+        "其余为选择题，answers 只能使用 Options 列出的标号，Multiple=false 时恰好选择一个。" +
         "不得漏题、重复题号或添加说明；答案中的逗号、公式、换行保留在同一个字符串内。题目清单：" +
         JsonSerializer.Serialize(questions);
 

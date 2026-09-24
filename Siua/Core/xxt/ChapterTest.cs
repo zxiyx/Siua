@@ -23,11 +23,16 @@ public sealed class XxtChapterTest
     public bool IsCompleted { get; private set; }
     public bool HasQuestion => _questions.Count > 0;
 
-    public Task<byte[]> CaptureRegionAsync(CancellationToken cancellationToken = default)
+    public async Task<byte[]> CaptureRegionAsync(CancellationToken cancellationToken = default)
     {
         if (_testFrame is null || _testPanel is null)
             throw new PlaywrightException("章节测试尚未加载，无法截图。");
-        return ChapterRegionCapture.CaptureAsync(_testFrame, _testPanel.Locator("form #ZyBottom"), cancellationToken);
+        var region = _testFrame.Locator("div#ZyBoom");
+        // 新页面的 ZyBoom 包含完整试卷；旧版页面仍使用 ZyBottom。
+        if (await region.CountAsync() != 1 ||
+            await region.Locator("div.TiMu.newTiMu").CountAsync() != _questions.Count)
+            region = _testPanel.Locator("form #ZyBottom");
+        return await ChapterRegionCapture.CaptureAsync(_testFrame, region, cancellationToken);
     }
 
     public async Task SubmitAnswerAsync(CancellationToken cancellationToken = default)
@@ -108,7 +113,7 @@ public sealed class XxtChapterTest
     }
 }
 
-/// <summary>表示一道学习通题目及其选择项或填空控件。</summary>
+/// <summary>表示一道学习通题目及其选择项、填空或文本答题控件。</summary>
 public sealed class XxtQuestion
 {
     private readonly ILocator _container;
@@ -131,7 +136,9 @@ public sealed class XxtQuestion
     public bool AllowsMultipleAnswers { get; private set; }
     public string? QuestionType { get; private set; }
     public bool IsFillInBlank { get; private set; }
-    public int BlankCount => _blanks.Count;
+    public bool IsTextAnswer { get; private set; }
+    public int BlankCount => IsFillInBlank ? _blanks.Count : 0;
+    public int TextAnswerInputCount => IsTextAnswer ? _blanks.Count : 0;
     public IReadOnlyList<XxtAnswerOption> Answers => _answers;
 
     public async Task LoadAnswersAsync(CancellationToken cancellationToken = default)
@@ -141,6 +148,7 @@ public sealed class XxtQuestion
         _blanks.Clear();
         AllowsMultipleAnswers = false;
         IsFillInBlank = false;
+        IsTextAnswer = false;
         var titleLocator = _container.Locator("div.Zy_TItle.clearfix").First;
         await titleLocator.WaitForAsync();
         Title = await titleLocator.InnerTextAsync();
@@ -165,7 +173,21 @@ public sealed class XxtQuestion
             return;
         }
 
-        // 问答/其它题也有 UEditor，不能把它们的工具栏或文本框当作选项或填空。
+        // 其它题是一个完整文本答案，不是填空，也不能把编辑器工具栏当成选项。
+        IsTextAnswer = type == "8";
+        if (IsTextAnswer)
+        {
+            var scope = _container.Locator(".Zy_ulTk");
+            var fields = scope.Locator("textarea[id^=answer]");
+            var frames = scope.Locator(".edui-editor-iframeholder iframe, iframe[id^=ueditor_]");
+            await frames.First.WaitForAsync();
+            if (await fields.CountAsync() != 1 || await frames.CountAsync() != 1)
+                throw new PlaywrightException("其它题没有唯一的文本编辑器和答案字段，停止填写。");
+            await AddEditorBlankAsync(frames.First, await fields.First.GetAttributeAsync("id"), null, cancellationToken);
+            return;
+        }
+
+        // 其余未适配题型不能按选择题处理。
         if (!string.IsNullOrWhiteSpace(type) && type is not ("0" or "1" or "3"))
             return;
 
@@ -310,7 +332,7 @@ public sealed class XxtQuestion
         var handle = await iframe.ElementHandleAsync();
         var frame = handle is null ? null : await handle.ContentFrameAsync();
         if (frame is null)
-            throw new PlaywrightException("无法进入学习通填空题的富文本编辑器。");
+            throw new PlaywrightException("无法进入学习通答题用的富文本编辑器。");
 
         // 真实 iframe 初始只有 body.view，UE._setup(document) 完成后才能输入。
         await frame.WaitForFunctionAsync("""
@@ -332,11 +354,24 @@ public sealed class XxtQuestion
         {
             throw new PlaywrightException($"学习通填空题答案数量不匹配：识别到 {BlankCount} 个空，收到 {answers.Count} 个答案。");
         }
+        await FillInputsAsync(answers, cancellationToken);
+    }
+
+    public async Task FillTextAnswerAsync(string answer, CancellationToken cancellationToken = default)
+    {
+        if (!IsTextAnswer || TextAnswerInputCount != 1)
+            throw new PlaywrightException("学习通其它题没有唯一的文本答题框，停止填写。");
+        await FillInputsAsync([answer], cancellationToken);
+    }
+
+    private async Task FillInputsAsync(IReadOnlyList<string> answers, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
         for (var index = 0; index < answers.Count; index++)
         {
             if (string.IsNullOrWhiteSpace(answers[index]))
             {
-                throw new PlaywrightException($"学习通填空题第 {index + 1} 个答案为空，停止填写。");
+                throw new PlaywrightException($"学习通文本答题框第 {index + 1} 个答案为空，停止填写。");
             }
         }
 
@@ -365,9 +400,9 @@ public sealed class XxtQuestion
                     const editor = views.flatMap(owner => Object.values(owner.UE?.instants || {}))
                         .find(item => item.body === element || item.body?.contains(element));
                     if (!editor)
-                        return args.requiresEditor ? '没有找到填空编辑器的 UEditor 实例，无法同步表单。' : null;
+                        return args.requiresEditor ? '没有找到答题编辑器的 UEditor 实例，无法同步表单。' : null;
                     if (typeof editor.sync !== 'function')
-                        return '填空编辑器不支持同步表单。';
+                        return '答题编辑器不支持同步表单。';
                     editor.fireEvent?.('contentChange');
                     editor.sync();
 
@@ -376,7 +411,7 @@ public sealed class XxtQuestion
                     const field = args.fieldId ? owner.getElementById(args.fieldId)
                         : editor.textarea || (editor.key && form?.elements.namedItem(editor.key));
                     if (!field || typeof field.value !== 'string')
-                        return '没有找到填空编辑器对应的表单字段。';
+                        return '没有找到答题编辑器对应的表单字段。';
                     emit(field);
                     const normalize = text => text.replace(/\s+/g, ' ').trim();
                     const readText = html => {
@@ -390,7 +425,7 @@ public sealed class XxtQuestion
                         return normalize(decoded.textContent || '');
                     };
                     if (readText(field.value) !== normalize(args.answer))
-                        return '填空编辑器内容没有正确同步到表单字段。';
+                        return '答题编辑器内容没有正确同步到表单字段。';
                     if (args.mirrorId) {
                         const mirror = owner.getElementById(args.mirrorId);
                         if (!mirror || readText(mirror.innerHTML) !== normalize(args.answer))
@@ -416,8 +451,8 @@ public sealed class XxtQuestion
         cancellationToken.ThrowIfCancellationRequested();
         try
         {
-            // 填空答案由题干和空数确定，编辑器工具栏及已有答案不应混入 OCR。
-            var target = IsFillInBlank ? _container.Locator("div.Zy_TItle.clearfix").First : _container;
+            // 文本题只截取题干，编辑器工具栏及已有答案不应混入 OCR。
+            var target = IsFillInBlank || IsTextAnswer ? _container.Locator("div.Zy_TItle.clearfix").First : _container;
             return await target.ScreenshotAsync(new LocatorScreenshotOptions
             {
                 Animations = ScreenshotAnimations.Disabled,
