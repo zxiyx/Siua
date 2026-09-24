@@ -168,7 +168,7 @@ public sealed class XxtRunner
                 await chapterTest.LoadQuestionsAsync(cancellationToken);
                 if (chapterTest.IsCompleted)
                 {
-                    LogInfo("该章节测试已完成");
+                    LogInfo($"该章节测试{chapterTest.SubmissionStatus}，无需重复答题");
                     continue;
                 }
 
@@ -195,10 +195,12 @@ public sealed class XxtRunner
                     }
                 }
 
+                LogInfo("正在提交章节测试...");
                 await chapterTest.SubmitAnswerAsync(cancellationToken);
                 await resolver.ConfirmTestSubmissionAsync(cancellationToken);
+                LogInfo("已确认提交，正在检查提交结果...");
                 await chapterTest.WaitForSubmissionAsync(cancellationToken);
-                LogInfo("该章节测试提交成功");
+                LogInfo($"该章节测试提交成功（{chapterTest.SubmissionStatus}），继续后续任务");
                 await Task.Delay(_settings.ChapterJumpInterval, cancellationToken);
             }
             catch (OperationCanceledException)

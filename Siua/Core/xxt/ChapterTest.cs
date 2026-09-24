@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Playwright;
@@ -21,6 +22,7 @@ public sealed class XxtChapterTest
 
     public IReadOnlyList<XxtQuestion> Questions => _questions;
     public bool IsCompleted { get; private set; }
+    public string SubmissionStatus { get; private set; } = string.Empty;
     public bool HasQuestion => _questions.Count > 0;
 
     public async Task<byte[]> CaptureRegionAsync(CancellationToken cancellationToken = default)
@@ -67,7 +69,8 @@ public sealed class XxtChapterTest
             cancellationToken);
         _testFrame = innerFrame;
 
-        IsCompleted = await innerFrame.Locator("div.testTit_status_complete").CountAsync() > 0;
+        SubmissionStatus = await ReadSubmissionStatusAsync(innerFrame);
+        IsCompleted = SubmissionStatus.Length > 0;
         _testPanel = innerFrame.Locator("div.radiusBG > div.CeYan");
         if (IsCompleted)
         {
@@ -85,7 +88,8 @@ public sealed class XxtChapterTest
         }
     }
 
-    public async Task WaitForSubmissionAsync(CancellationToken cancellationToken = default)
+    public async Task WaitForSubmissionAsync(
+        CancellationToken cancellationToken = default, int timeoutMs = 30_000)
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (_testFrame is null)
@@ -93,10 +97,75 @@ public sealed class XxtChapterTest
             throw new PlaywrightException("学习通章节测试尚未加载，无法确认提交结果。");
         }
 
-        await _testFrame.Locator("div.testTit_status_complete").First.WaitForAsync();
-        cancellationToken.ThrowIfCancellationRequested();
-        IsCompleted = true;
+        var timer = Stopwatch.StartNew();
+        while (timer.ElapsedMilliseconds < timeoutMs)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            try
+            {
+                // 提交可能刷新或替换内层 iframe，不能一直等待旧文档的单一完成标记。
+                var outer = await TryGetContentFrameAsync(_container.Locator("iframe").First);
+                if (outer is not null)
+                {
+                    var current = await TryGetContentFrameAsync(outer.Locator("iframe").First) ?? outer;
+                    SubmissionStatus = await ReadSubmissionStatusAsync(current);
+                    if (SubmissionStatus.Length > 0)
+                    {
+                        _testFrame = current;
+                        IsCompleted = true;
+                        return;
+                    }
+                }
+            }
+            catch (PlaywrightException exception) when (
+                !_container.Page.IsClosed &&
+                (exception.Message.Contains("detached", StringComparison.OrdinalIgnoreCase) ||
+                 exception.Message.Contains("Execution context was destroyed", StringComparison.OrdinalIgnoreCase)))
+            {
+                // 仅重试文档切换期间的失效引用，保留其它错误。
+            }
+            catch (TimeoutException) when (!_container.Page.IsClosed)
+            {
+                // 元素计数与取 iframe 句柄之间，旧 iframe 可能刚好被替换。
+            }
+            await Task.Delay(200, cancellationToken);
+        }
+
+        throw new PlaywrightException(
+            "已确认提交，但未检测到“已提交”“待批阅”或“已完成”状态。请检查页面提示或网络；已停止以避免重复提交或跳过测试。");
     }
+
+    private static async Task<IFrame?> TryGetContentFrameAsync(ILocator locator)
+    {
+        if (await locator.CountAsync() == 0)
+            return null;
+        var handle = await locator.ElementHandleAsync(new LocatorElementHandleOptions { Timeout = 1000 });
+        if (handle is null)
+            return null;
+        try { return await handle.ContentFrameAsync(); }
+        finally { await handle.DisposeAsync(); }
+    }
+
+    private static Task<string> ReadSubmissionStatusAsync(IFrame frame) => frame.EvaluateAsync<string>("""
+        () => {
+            const excluded = '.TiMu, .singleQuesId, .Zy_TItle, .Zy_ulTk, .edui-editor, a, button, [role="button"], [contenteditable="true"]';
+            const visibleStatus = element => {
+                if (element.closest(excluded))
+                    return false;
+                const style = getComputedStyle(element);
+                return style.display !== 'none' && style.visibility !== 'hidden' && element.getClientRects().length > 0;
+            };
+            // 忽略题干/选项中的同名文字、隐藏模板和“查看已提交作业”等按钮。
+            // 待批阅也是提交成功，不能等待教师批阅后才继续学习。
+            for (const element of document.querySelectorAll('div, span, p, strong, b, em, h1, h2, h3')) {
+                if (!visibleStatus(element) || element.querySelector(excluded)) continue;
+                const text = (element.textContent || '').replace(/\s+/g, '');
+                const match = text.match(/^(?:(?:本次)?(?:章节测试|测试|作业))?(?:状态[:：]?)?(已提交|提交成功|已完成|已批阅|已批改|待批阅|待批改|等待批阅|待教师批阅)(?:[，,（(]?(?:待批阅|待批改|等待批阅|待教师批阅)[）)]?)?[。！!]?$/);
+                if (match) return match[1];
+            }
+            return [...document.querySelectorAll('.testTit_status_complete')].some(visibleStatus) ? '已完成' : '';
+        }
+        """);
 
     private static async Task<IFrame> GetRequiredContentFrameAsync(
         ILocator locator,
