@@ -254,15 +254,11 @@ public sealed class XxtRunner
         if (image is null)
             return DisableAutoTest("题目截图失败，已关闭自动答题");
 
-        var questionText = _settings.UsedAiToOcr
-            ? await _aiControlService.GetTextFromImage(image)
-            : await _ocrService.RecognizeAsync(image, cancellationToken);
+        var questionText = await _ocrService.RecognizeAsync(image, cancellationToken);
 
         if (questionText is null)
         {
-            return DisableAutoTest(_settings.UsedAiToOcr
-                ? "AIOCR 识图异常，已自动关闭自动答题"
-                : "OCR 识图异常，已关闭自动答题并结束刷课");
+            return DisableAutoTest("OCR 识图异常，已关闭自动答题并结束刷课");
         }
 
         var answer = question.IsTextAnswer
@@ -325,16 +321,10 @@ public sealed class XxtRunner
 
         LogInfo($"区域截图：一次识别并回答 {specs.Count} 道学习通章节测试题");
         var image = await chapterTest.CaptureRegionAsync(cancellationToken);
-        string? response;
-        if (_settings.UsedAiToOcr)
-            response = await _aiControlService.GetChapterAnswers(image, specs);
-        else
-        {
-            var text = await _ocrService.RecognizeAsync(image, cancellationToken);
-            if (string.IsNullOrWhiteSpace(text))
-                return DisableAutoTest("章节测试区域 OCR 识别失败，已关闭自动答题");
-            response = await _aiControlService.GetChapterAnswers(text, specs);
-        }
+        var text = await _ocrService.RecognizeAsync(image, cancellationToken);
+        if (string.IsNullOrWhiteSpace(text))
+            return DisableAutoTest("章节测试区域 OCR 识别失败，已关闭自动答题");
+        var response = await _aiControlService.GetChapterAnswers(text, specs);
 
         cancellationToken.ThrowIfCancellationRequested();
         if (!ChapterAnswerParser.TryParse(response, specs, out var answers))

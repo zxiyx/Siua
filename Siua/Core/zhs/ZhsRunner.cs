@@ -293,14 +293,10 @@ public sealed class ZhsRunner
         if (image is null)
             return DisableAutoTest("智慧树题目截图失败，已关闭自动答题");
 
-        var questionText = _settings.UsedAiToOcr
-            ? await _aiControlService.GetTextFromImage(image)
-            : await _ocrService.RecognizeAsync(image, cancellationToken);
+        var questionText = await _ocrService.RecognizeAsync(image, cancellationToken);
         if (questionText is null)
         {
-            return DisableAutoTest(_settings.UsedAiToOcr
-                ? "智慧树题目 AIOCR 识别异常，已关闭自动答题"
-                : "智慧树题目 OCR 识别异常，已关闭自动答题并结束刷课");
+            return DisableAutoTest("智慧树题目 OCR 识别异常，已关闭自动答题并结束刷课");
         }
 
         var answer = await _aiControlService.GetAnswer(questionText);
@@ -341,19 +337,13 @@ public sealed class ZhsRunner
             question.Answers.Select(option => option.Marker).ToArray())).ToArray();
         LogInfo($"区域截图：一次识别并回答 {questionCount} 道智慧树章节测试题");
         var image = await chapterTest.CaptureRegionAsync(examPage, questionCount, cancellationToken);
-        string? response;
-        if (_settings.UsedAiToOcr)
-            response = await _aiControlService.GetChapterAnswers(image, specs);
-        else
+        var text = await _ocrService.RecognizeAsync(image, cancellationToken);
+        if (string.IsNullOrWhiteSpace(text))
         {
-            var text = await _ocrService.RecognizeAsync(image, cancellationToken);
-            if (string.IsNullOrWhiteSpace(text))
-            {
-                DisableAutoTest("智慧树章节测试区域 OCR 识别失败，已停止答题");
-                return null;
-            }
-            response = await _aiControlService.GetChapterAnswers(text, specs);
+            DisableAutoTest("智慧树章节测试区域 OCR 识别失败，已停止答题");
+            return null;
         }
+        var response = await _aiControlService.GetChapterAnswers(text, specs);
         cancellationToken.ThrowIfCancellationRequested();
         if (!ChapterAnswerParser.TryParse(response, specs, out var answers))
         {

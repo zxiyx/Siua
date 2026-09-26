@@ -3,6 +3,9 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Globalization;
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
+using Avalonia.Controls.Notifications;
 using Avalonia.Data;
 using Avalonia.Data.Converters;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -15,6 +18,12 @@ namespace Siua.ViewModels;
 public partial class AiSettingsViewModel:ObservableObject
 {
     public Action? RequestClose;
+    private readonly ApiConnectionTester _connectionTester;
+    private CancellationTokenSource? _connectionTestCancellation;
+    [ObservableProperty] private bool _isTestingConnection;
+    [ObservableProperty] private bool _isConnectionInfoOpen;
+    [ObservableProperty] private string _connectionInfoMessage = string.Empty;
+    [ObservableProperty] private NotificationType _connectionInfoSeverity = NotificationType.Information;
 
     private static readonly Dictionary<string, AiProvider> ConfigMap = 
         AiProviderService.Providers.ToDictionary(p => p.Provider, p => p);
@@ -25,8 +34,9 @@ public partial class AiSettingsViewModel:ObservableObject
     
     [ObservableProperty]
     private  GlobalSettings _settings;
-    public AiSettingsViewModel(GlobalSettings globalSettings)
+    public AiSettingsViewModel(GlobalSettings globalSettings, ApiConnectionTester connectionTester)
     {
+        _connectionTester = connectionTester;
         _settings = globalSettings;
         SelectedProvider = string.IsNullOrWhiteSpace(_settings.CurrentAi.AiProvider)
             ? "DeepSeek"
@@ -50,7 +60,35 @@ public partial class AiSettingsViewModel:ObservableObject
     }
 
     [RelayCommand]
-    private void Close() => RequestClose?.Invoke();
+    private async Task TestApiConnection()
+    {
+        using var cancellation = new CancellationTokenSource();
+        _connectionTestCancellation = cancellation;
+        IsTestingConnection = true;
+        IsConnectionInfoOpen = false;
+        try
+        {
+            var result = await _connectionTester.TestAsync(Settings.CurrentAi.Domain, cancellation.Token);
+            cancellation.Token.ThrowIfCancellationRequested();
+            ConnectionInfoMessage = $"连通{(result.IsSuccess ? "正常" : "错误")}（{result.ElapsedMilliseconds} ms）";
+            ConnectionInfoSeverity = result.IsSuccess ? NotificationType.Success : NotificationType.Error;
+            IsConnectionInfoOpen = true;
+        }
+        catch (OperationCanceledException) when (cancellation.IsCancellationRequested) { }
+        finally
+        {
+            _connectionTestCancellation = null;
+            IsTestingConnection = false;
+        }
+    }
+
+    [RelayCommand]
+    private void Close()
+    {
+        _connectionTestCancellation?.Cancel();
+        IsConnectionInfoOpen = false;
+        RequestClose?.Invoke();
+    }
 }
 /// <summary>将 AI 服务商选择状态转换为绑定布尔值。</summary>
 public class ProviderToBoolConverter : IValueConverter

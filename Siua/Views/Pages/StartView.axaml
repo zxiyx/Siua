@@ -183,18 +183,6 @@
 
                     <Separator/>
 
-                    <Grid ColumnDefinitions="*,Auto">
-                        <StackPanel>
-                            <TextBlock Text="AI 识图" FontWeight="SemiBold"/>
-                            <TextBlock Text="使用 AI 模型代替本地 Pix2Text 识别题目"
-                                       FontSize="12" Foreground="{DynamicResource SukiLowText}"/>
-                        </StackPanel>
-                        <ToggleButton Grid.Column="1" Classes="Switch"
-                                      IsChecked="{Binding Settings.UsedAiToOcr}"/>
-                    </Grid>
-
-                    <Separator/>
-
                     <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
                         <StackPanel>
                             <TextBlock Text="Pix2Text" FontWeight="SemiBold"/>

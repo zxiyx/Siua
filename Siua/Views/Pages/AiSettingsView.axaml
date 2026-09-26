@@ -3,6 +3,8 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:vm="using:Siua.ViewModels"
+             xmlns:views="using:Siua.Views"
+             xmlns:co="using:Siua.Common"
              xmlns:suki="https://github.com/kikipoulet/SukiUI"
              xmlns:icons="clr-namespace:Material.Icons.Avalonia;assembly=Material.Icons.Avalonia"
              mc:Ignorable="d" d:DesignWidth="920" d:DesignHeight="720"
@@ -15,16 +17,21 @@
     <ScrollViewer HorizontalScrollBarVisibility="Disabled">
         <StackPanel Margin="26" Spacing="18" MaxWidth="940" HorizontalAlignment="Stretch">
             <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
-                <Button Classes="Basic" Width="38" Height="38" Command="{Binding CloseCommand}"
+                <Button Classes="Flat Icon" Width="38" Height="38" Command="{Binding CloseCommand}"
                         ToolTip.Tip="返回设置">
                     <icons:MaterialIcon Kind="ArrowLeft" Width="22" Height="22"/>
                 </Button>
                 <StackPanel Grid.Column="1" Spacing="3" VerticalAlignment="Center">
                     <TextBlock Text="AI 模型设置" FontSize="27" FontWeight="SemiBold"/>
-                    <TextBlock Text="连接用于章节答题和图像识别的模型服务"
+                    <TextBlock Text="连接用于章节答题的模型服务"
                                FontSize="14" Foreground="{DynamicResource SukiLowText}"/>
                 </StackPanel>
             </Grid>
+
+            <suki:InfoBar Message="{Binding ConnectionInfoMessage}"
+                          co:InfoBarExtensions.Severity="{Binding ConnectionInfoSeverity}" IsClosable="True"
+                          IsOpen="{Binding IsConnectionInfoOpen, Mode=TwoWay}"
+                          IsVisible="{Binding IsConnectionInfoOpen}"/>
 
             <suki:GlassCard CornerRadius="14">
                 <StackPanel Spacing="14">
@@ -93,11 +100,15 @@
                 </suki:BusyArea>
             </suki:GlassCard>
 
-            <Grid ColumnDefinitions="*,Auto">
+            <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
                 <TextBlock Text="API Key 仅保存在本机配置文件中"
                            FontSize="12" VerticalAlignment="Center"
                            Foreground="{DynamicResource SukiLowText}"/>
-                <Button Grid.Column="1" Classes="Flat" MinWidth="108" Content="完成"
+                <Button Grid.Column="1" Classes="Flat" MinWidth="140" Content="检测连通"
+                        Command="{Binding TestApiConnectionCommand}"
+                        suki:ButtonExtensions.Icon="{icons:MaterialIconExt Kind=Speedometer}"
+                        suki:ButtonExtensions.ShowProgress="{Binding IsTestingConnection}"/>
+                <Button Grid.Column="2" Classes="Flat" MinWidth="108" Content="完成"
                         Command="{Binding CloseCommand}"
                         suki:ButtonExtensions.Icon="{icons:MaterialIconExt Kind=Check}"/>
             </Grid>

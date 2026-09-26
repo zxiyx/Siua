@@ -69,6 +69,7 @@ public  partial class App : Application
         });
         services.AddSingleton<Pix2TextService>();
         services.AddSingleton<AiControlService>();
+        services.AddSingleton<ApiConnectionTester>();
         services.AddSingleton<ILogService,LogService>();
         services.AddSingleton<ICoreService,CoreService>();
         services.AddSingleton<IShowWindowManager, ShowWindowManager>();

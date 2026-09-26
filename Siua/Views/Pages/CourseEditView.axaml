@@ -11,7 +11,7 @@
     <ScrollViewer HorizontalScrollBarVisibility="Disabled">
         <StackPanel Margin="26" Spacing="18" MaxWidth="940" HorizontalAlignment="Stretch">
             <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
-                <Button Classes="Basic" Width="38" Height="38" Command="{Binding CloseCommand}"
+                <Button Classes="Flat Icon" Width="38" Height="38" Command="{Binding CloseCommand}"
                         ToolTip.Tip="返回设置">
                     <icons:MaterialIcon Kind="ArrowLeft" Width="22" Height="22"/>
                 </Button>

@@ -10,7 +10,7 @@ using Siua.Interfaces;
 
 namespace Siua.Services;
 
-/// <summary>负责调用 AI 模型完成 OCR 与答案分析。</summary>
+/// <summary>负责调用 AI 模型分析题目文字并返回答案。</summary>
 public class AiControlService
 {
     private readonly GlobalSettings _globalSettings;
@@ -49,9 +49,6 @@ public class AiControlService
         "你是一个专业答题助手。当前是需要完整文本作答的其它题。请依据题干要求直接返回可填写的答案正文。" +
         "保留必要的说明、标点、公式和段落换行，不要套用选择题字母或填空数组格式，不要添加题号、开场白或 Markdown 代码块。");
 
-    public Task<string?> GetChapterAnswers(byte[] image, IReadOnlyList<ChapterQuestionSpec> questions) =>
-        GetAnswerAsync("请回答这张完整章节测试截图中的全部题目。", ChapterPrompt(questions), image);
-
     private static string ChapterPrompt(IReadOnlyList<ChapterQuestionSpec> questions) =>
         "你是一个专业答题助手。请回答整份章节测试，题目按截图或识别文本从上到下排列。" +
         "仅返回 JSON 数组，每题一个对象，例如 [{\"index\":1,\"answers\":[\"A\"]},{\"index\":2,\"answers\":[\"甲\",\"乙\"]}]。" +
@@ -62,7 +59,7 @@ public class AiControlService
         "不得漏题、重复题号或添加说明；答案中的逗号、公式、换行保留在同一个字符串内。题目清单：" +
         JsonSerializer.Serialize(questions);
 
-    private async Task<string?> GetAnswerAsync(string question, string systemPrompt, byte[]? image = null)
+    private async Task<string?> GetAnswerAsync(string question, string systemPrompt)
     {
         using var client = CreateClient();
         if (client is null)
@@ -75,13 +72,7 @@ public class AiControlService
             var messages = new List<Message>
             {
                 new(Role.System, systemPrompt),
-                image is null
-                    ? new Message(Role.User, question)
-                    : new Message(Role.User, new List<Content>
-                    {
-                        question,
-                        new ImageUrl($"image/png;base64,{Convert.ToBase64String(image)}")
-                    })
+                new(Role.User, question)
             };
             var request = new ChatRequest(messages, _globalSettings.CurrentAi.ModelName, temperature: 0.1, frequencyPenalty: 0);
             var response = await client.ChatEndpoint.GetCompletionAsync(request);
@@ -90,44 +81,6 @@ public class AiControlService
         catch (Exception exception)
         {
             _logService.AddLog(LogLevel.Error, "AI", $"获取答案失败：{exception.Message}");
-            return null;
-        }
-    }
-
-    public async Task<string?> GetTextFromImage(byte[] imageBytes)
-    {
-        if (imageBytes is not { Length: > 0 })
-        {
-            _logService.AddLog(LogLevel.Error, "AI", "图像识别失败：截图数据为空");
-            return null;
-        }
-
-        using var client = CreateClient();
-        if (client is null)
-        {
-            return null;
-        }
-
-        try
-        {
-            var dataUri = $"image/png;base64,{Convert.ToBase64String(imageBytes)}";
-            var content = new List<Content>
-            {
-                "请识别图片中的文字，包括数学符号等，仅返回识别结果，不要添加其他说明",
-                new ImageUrl(dataUri)
-            };
-            var messages = new List<Message>
-            {
-                new(Role.System, "你是一个专业的 OCR 文字识别助手"),
-                new(Role.User, content)
-            };
-            var request = new ChatRequest(messages, _globalSettings.CurrentAi.ModelName, 0.3);
-            var response = await client.ChatEndpoint.GetCompletionAsync(request);
-            return response.FirstChoice.Message.Content.ToString();
-        }
-        catch (Exception exception)
-        {
-            _logService.AddLog(LogLevel.Error, "AI", $"图像识别失败：{exception.Message}");
             return null;
         }
     }
