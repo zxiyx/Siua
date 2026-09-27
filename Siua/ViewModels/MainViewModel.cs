@@ -56,7 +56,7 @@ public partial class MainViewModel : ViewModelBase
         }
         catch (Exception exception)
         {
-            _log.AddLog(LogLevel.Error, "App", $"无法打开链接：{exception.Message}");
+            _log.AddLog(LogLevel.Error, "App", $"无法打开链接：{exception}");
         }
     }
 }

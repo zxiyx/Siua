@@ -79,7 +79,7 @@ public sealed class ZhsRunner
                         exception is PlaywrightException or InvalidOperationException &&
                         !_page.IsClosed)
                     {
-                        LogError($"智慧树小节处理失败，已跳过：{exception.Message}");
+                        LogError($"智慧树小节处理失败，已跳过：{exception}");
                     }
                 }
 
@@ -108,7 +108,7 @@ public sealed class ZhsRunner
                 exception is PlaywrightException or InvalidOperationException &&
                 !_page.IsClosed)
             {
-                LogError($"智慧树章节处理失败，已跳过：{exception.Message}");
+                LogError($"智慧树章节处理失败，已跳过：{exception}");
             }
         }
 
@@ -260,7 +260,7 @@ public sealed class ZhsRunner
         catch (Exception exception)
         {
             return DisableAutoTest(
-                $"智慧树章节测试处理失败：{exception.Message}，已关闭自动答题");
+                $"智慧树章节测试处理失败，已关闭自动答题：{exception}");
         }
         finally
         {
@@ -275,7 +275,7 @@ public sealed class ZhsRunner
                 }
                 catch (PlaywrightException exception)
                 {
-                    LogError($"返回智慧树课程页面失败：{exception.Message}");
+                    LogError($"返回智慧树课程页面失败：{exception}");
                 }
             }
         }

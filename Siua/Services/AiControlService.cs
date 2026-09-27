@@ -80,7 +80,7 @@ public class AiControlService
         }
         catch (Exception exception)
         {
-            _logService.AddLog(LogLevel.Error, "AI", $"获取答案失败：{exception.Message}");
+            _logService.AddLog(LogLevel.Error, "AI", $"获取答案失败：{exception}");
             return null;
         }
     }

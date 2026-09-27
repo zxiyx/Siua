@@ -134,7 +134,7 @@ public sealed class XxtPageResolver
                 _logService.AddLog(
                     LogLevel.Error,
                     "Xxt",
-                    $"任务点解析失败，当前页面仍有未确认任务：{exception.Message}");
+                    $"任务点解析失败，当前页面仍有未确认任务：{exception}");
             }
         }
     }

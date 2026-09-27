@@ -78,7 +78,7 @@ public sealed class XxtRunner
         catch (Exception exception) when (
             exception is PlaywrightException or TimeoutException && !_page.IsClosed)
         {
-            LogError($"学习通页面处理失败，当前任务已停止：{exception.Message}");
+            LogError($"学习通页面处理失败，当前任务已停止：{exception}");
             return false;
         }
     }
@@ -123,7 +123,7 @@ public sealed class XxtRunner
                 exception is PlaywrightException or TimeoutException or InvalidOperationException &&
                 !_page.IsClosed)
             {
-                LogError($"视频处理失败，已停止以避免跳过未完成视频：{exception.Message}");
+                LogError($"视频处理失败，已停止以避免跳过未完成视频：{exception}");
                 return false;
             }
         }
@@ -156,7 +156,7 @@ public sealed class XxtRunner
             }
             catch (PlaywrightException exception) when (!_page.IsClosed)
             {
-                LogError($"文档处理失败，已跳过当前任务点：{exception.Message}");
+                LogError($"文档处理失败，已跳过当前任务点：{exception}");
             }
         }
     }
@@ -214,7 +214,7 @@ public sealed class XxtRunner
             catch (Exception exception) when (
                 exception is PlaywrightException or TimeoutException && !_page.IsClosed)
             {
-                LogError($"章节测试控件处理失败，已停止以避免跳过测试：{exception.Message}");
+                LogError($"章节测试控件处理失败，已停止以避免跳过测试：{exception}");
                 return false;
             }
         }

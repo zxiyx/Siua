@@ -141,13 +141,13 @@ public sealed class Pix2TextService : IDisposable
         catch (Win32Exception exception)
         {
             ErrorMessage = "未找到 uv，请先安装 uv 并确保 uv.exe 已加入 PATH";
-            LogInstallation($"{ErrorMessage}：{exception.Message}", LogLevel.Error);
+            LogInstallation($"{ErrorMessage}：{exception}", LogLevel.Error);
             return false;
         }
         catch (Exception exception)
         {
             ErrorMessage = exception.Message;
-            LogInstallation($"安装失败：{exception.Message}", LogLevel.Error);
+            LogInstallation($"安装失败：{exception}", LogLevel.Error);
             return false;
         }
         finally
@@ -255,7 +255,7 @@ public sealed class Pix2TextService : IDisposable
         catch (Exception ex)
         {
             ErrorMessage = ex.Message;
-            LogError($"Pix2Text 启动失败：{ex.Message}");
+            LogError($"Pix2Text 启动失败：{ex}");
             return false;
         }
         finally
@@ -320,7 +320,7 @@ public sealed class Pix2TextService : IDisposable
         {
             ErrorMessage = ex.Message;
             IsReady = false;
-            LogError($"Pix2Text 识别失败：{ex.Message}");
+            LogError($"Pix2Text 识别失败：{ex}");
             return null;
         }
     }
@@ -397,7 +397,7 @@ public sealed class Pix2TextService : IDisposable
             }
             catch (Exception exception)
             {
-                LogError($"Pix2Text 监听进程 {processId} 停止失败：{exception.Message}");
+                LogError($"Pix2Text 监听进程 {processId} 停止失败：{exception}");
             }
         }
 

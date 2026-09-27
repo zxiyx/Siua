@@ -110,12 +110,13 @@ public sealed class CoreService : ICoreService
         }
         catch (Exception exception) when (!IsSessionActive || exception is PlaywrightException)
         {
+            _logService.AddLog(LogLevel.Error, "Browser", $"浏览器启动失败：{exception}");
             HandleSessionEnded("浏览器已关闭或连接中断，任务已终止");
             return false;
         }
         catch (Exception exception)
         {
-            _logService.AddLog($"浏览器启动失败：{exception.Message}");
+            _logService.AddLog(LogLevel.Error, "Browser", $"浏览器启动失败：{exception}");
             DisposeBrowserResources();
             return false;
         }
@@ -167,14 +168,15 @@ public sealed class CoreService : ICoreService
         }
         catch (PlaywrightException exception) when (!IsSessionActive)
         {
-            HandleSessionEnded($"浏览器连接已中断：{exception.Message}");
+            _logService.AddLog(LogLevel.Error, "Browser", $"浏览器连接已中断：{exception}");
+            HandleSessionEnded("浏览器连接已中断，任务已终止");
         }
         catch (Exception exception)
         {
             _logService.AddLog(
                 LogLevel.Error,
                 "Zhs",
-                $"处理智慧树课程失败：{exception.Message}");
+                $"处理智慧树课程失败：{exception}");
         }
 
         return false;
@@ -204,7 +206,8 @@ public sealed class CoreService : ICoreService
         }
         catch (PlaywrightException exception) when (!IsSessionActive)
         {
-            HandleSessionEnded($"浏览器连接已中断：{exception.Message}");
+            _logService.AddLog(LogLevel.Error, "Browser", $"浏览器连接已中断：{exception}");
+            HandleSessionEnded("浏览器连接已中断，任务已终止");
             return false;
         }
         catch (Exception exception)
@@ -212,7 +215,7 @@ public sealed class CoreService : ICoreService
             _logService.AddLog(
                 LogLevel.Error,
                 "Xxt",
-                $"处理学习通课程页面失败：{exception.Message}");
+                $"处理学习通课程页面失败：{exception}");
             return false;
         }
     }
@@ -352,7 +355,7 @@ public sealed class CoreService : ICoreService
             }
             catch (Exception exception)
             {
-                _logService.AddLog($"[心跳] 检测异常：{exception.Message}");
+                _logService.AddLog(LogLevel.Error, "Browser", $"[心跳] 检测异常：{exception}");
             }
         }
     }
@@ -406,15 +409,15 @@ public sealed class CoreService : ICoreService
         }
         catch (UnauthorizedAccessException exception)
         {
-            _logService.AddLog($"[注册表] 权限不足：{exception.Message}");
+            _logService.AddLog(LogLevel.Error, "Browser", $"[注册表] 权限不足：{exception}");
         }
         catch (SecurityException exception)
         {
-            _logService.AddLog($"[注册表] 安全异常：{exception.Message}");
+            _logService.AddLog(LogLevel.Error, "Browser", $"[注册表] 安全异常：{exception}");
         }
         catch (Exception exception)
         {
-            _logService.AddLog($"[注册表] 读取失败 [{exception.GetType().Name}]：{exception.Message}");
+            _logService.AddLog(LogLevel.Error, "Browser", $"[注册表] 读取失败：{exception}");
         }
 
         return null;
