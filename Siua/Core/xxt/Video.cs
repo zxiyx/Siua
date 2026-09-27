@@ -20,9 +20,7 @@ public sealed class XxtVideo
     private readonly GlobalSettings _settings;
     private ILocator? _player;
     private ILocator? _videoElement;
-    private ILocator? _playButton;
     private ILocator? _bigPlayButton;
-    private bool _usePlaybackApi;
 
     public XxtVideo(ILocator container, GlobalSettings settings)
     {
@@ -37,7 +35,6 @@ public sealed class XxtVideo
 
     public async Task InitializeAsync()
     {
-        _usePlaybackApi = false;
         var iframeLocator = _container.Locator("iframe").First;
         await iframeLocator.WaitForAsync();
         var iframeElement = await iframeLocator.ElementHandleAsync()
@@ -46,7 +43,6 @@ public sealed class XxtVideo
             ?? throw new PlaywrightException("无法进入视频 iframe。");
         _player = frame.Locator("#video").First;
         _videoElement = frame.Locator("#reader video.vjs-tech").First;
-        _playButton = frame.Locator(".vjs-play-control").First;
         _bigPlayButton = frame.Locator(".vjs-big-play-button").First;
 
         await _player.WaitForAsync();
@@ -106,10 +102,7 @@ public sealed class XxtVideo
                 return true;
             }
             await ApplyPlaybackSettingsAsync();
-            if (HasClass(playerClass, PausedClass))
-            {
-                await ResumeAsync(cancellationToken);
-            }
+            await ResumeAsync(cancellationToken);
 
             await Task.Delay(1000, cancellationToken);
         }
@@ -120,19 +113,8 @@ public sealed class XxtVideo
     private async Task ResumeAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var playerClass = await GetPlayerClassAsync();
-        if (HasClass(playerClass, EndedClass) || !HasClass(playerClass, PausedClass))
-        {
-            return;
-        }
-
-        var playButton = GetPlayButton();
-        if (!_usePlaybackApi && await IsUsableAsync(playButton))
-        {
-            await ClickPlayOrUseApiAsync(playButton, cancellationToken);
-            return;
-        }
-
+        // 拉进度后和播放中恢复均直接使用播放接口，以实际 paused 状态为准。
+        // 不再点击控制栏按钮，避免浮层拦截或暂停样式滞后导致反向暂停。
         await PlayThroughApiAsync(cancellationToken);
     }
 
@@ -148,7 +130,6 @@ public sealed class XxtVideo
         {
             // 视频弹题浮层可能截获鼠标事件，即使播放按钮可见也无法点击。
             // 使用原播放器的播放接口，不移除浮层或伪造任务完成状态。
-            _usePlaybackApi = true;
             await PlayThroughApiAsync(cancellationToken);
         }
     }
@@ -231,9 +212,6 @@ public sealed class XxtVideo
 
     private ILocator GetVideoElement() =>
         _videoElement ?? throw new InvalidOperationException("视频尚未初始化。");
-
-    private ILocator GetPlayButton() =>
-        _playButton ?? throw new InvalidOperationException("视频尚未初始化。");
 
     private ILocator GetBigPlayButton() =>
         _bigPlayButton ?? throw new InvalidOperationException("视频尚未初始化。");

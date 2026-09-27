@@ -66,8 +66,9 @@ public sealed class XxtRunner
                 return false;
             await ProcessDocumentsAsync(resolver.Docs, cancellationToken);
 
-            LogInfo("进入下一节...");
-            await resolver.NextPageAsync();
+            if (!await resolver.NextPageAsync(cancellationToken))
+                return false;
+            LogInfo("已进入下一节");
             await Task.Delay(_settings.ChapterJumpInterval, cancellationToken);
             return true;
         }
