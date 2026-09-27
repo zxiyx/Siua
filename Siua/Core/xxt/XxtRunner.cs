@@ -62,7 +62,8 @@ public sealed class XxtRunner
                 return false;
             }
 
-            await ProcessVideosAsync(resolver.Videos, cancellationToken);
+            if (!await ProcessVideosAsync(resolver.Videos, cancellationToken))
+                return false;
             await ProcessDocumentsAsync(resolver.Docs, cancellationToken);
 
             LogInfo("进入下一节...");
@@ -82,7 +83,7 @@ public sealed class XxtRunner
         }
     }
 
-    private async Task ProcessVideosAsync(
+    private async Task<bool> ProcessVideosAsync(
         IReadOnlyList<XxtVideo> videos,
         CancellationToken cancellationToken)
     {
@@ -108,7 +109,8 @@ public sealed class XxtRunner
                 if (!await video.WaitForEndAsync(cancellationToken: cancellationToken))
                 {
                     cancellationToken.ThrowIfCancellationRequested();
-                    LogError("视频结束检测超时，继续处理后续任务点");
+                    LogError("视频结束检测超时，已停止以避免跳过未完成视频");
+                    return false;
                 }
 
                 LogInfo("播放完毕");
@@ -118,12 +120,14 @@ public sealed class XxtRunner
                 throw;
             }
             catch (Exception exception) when (
-                exception is PlaywrightException or InvalidOperationException &&
+                exception is PlaywrightException or TimeoutException or InvalidOperationException &&
                 !_page.IsClosed)
             {
-                LogError($"视频处理失败，已跳过当前任务点：{exception.Message}");
+                LogError($"视频处理失败，已停止以避免跳过未完成视频：{exception.Message}");
+                return false;
             }
         }
+        return true;
     }
 
     private async Task ProcessDocumentsAsync(

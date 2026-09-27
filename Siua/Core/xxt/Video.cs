@@ -14,6 +14,7 @@ public sealed class XxtVideo
     private const string EndedClass = "vjs-ended";
     private const string PausedClass = "vjs-paused";
     private const string StartedClass = "vjs-has-started";
+    private const int PlayClickTimeout = 1500;
 
     private readonly ILocator _container;
     private readonly GlobalSettings _settings;
@@ -21,6 +22,7 @@ public sealed class XxtVideo
     private ILocator? _videoElement;
     private ILocator? _playButton;
     private ILocator? _bigPlayButton;
+    private bool _usePlaybackApi;
 
     public XxtVideo(ILocator container, GlobalSettings settings)
     {
@@ -35,6 +37,7 @@ public sealed class XxtVideo
 
     public async Task InitializeAsync()
     {
+        _usePlaybackApi = false;
         var iframeLocator = _container.Locator("iframe").First;
         await iframeLocator.WaitForAsync();
         var iframeElement = await iframeLocator.ElementHandleAsync()
@@ -54,17 +57,21 @@ public sealed class XxtVideo
     {
         cancellationToken.ThrowIfCancellationRequested();
         var playerClass = await GetPlayerClassAsync();
+        if (HasClass(playerClass, EndedClass))
+            return;
+
+        // 在首次播放前应用静音设置，避免 API 后备播放受到自动播放策略限制。
+        await ApplyPlaybackSettingsAsync();
 
         if (!HasClass(playerClass, StartedClass) &&
             await IsUsableAsync(GetBigPlayButton()))
         {
-            await GetBigPlayButton().ClickAsync();
+            await ClickPlayOrUseApiAsync(GetBigPlayButton(), cancellationToken);
         }
 
-        await ApplyPlaybackSettingsAsync();
         if (HasClass(await GetPlayerClassAsync(), PausedClass))
         {
-            await ResumeAsync();
+            await ResumeAsync(cancellationToken);
         }
     }
 
@@ -78,7 +85,7 @@ public sealed class XxtVideo
         }
         await video.EvaluateAsync("(element, time) => element.currentTime = time", duration.Value * 0.999);
         await ApplyPlaybackSettingsAsync();
-        await ResumeAsync();
+        await ResumeAsync(cancellationToken);
         await Task.Delay(500, cancellationToken);
 
         var currentTime = await video.EvaluateAsync<double>("element => element.currentTime");
@@ -101,7 +108,7 @@ public sealed class XxtVideo
             await ApplyPlaybackSettingsAsync();
             if (HasClass(playerClass, PausedClass))
             {
-                await ResumeAsync();
+                await ResumeAsync(cancellationToken);
             }
 
             await Task.Delay(1000, cancellationToken);
@@ -110,18 +117,72 @@ public sealed class XxtVideo
         return HasClass(await GetPlayerClassAsync(), EndedClass);
     }
 
-    private async Task ResumeAsync()
+    private async Task ResumeAsync(CancellationToken cancellationToken)
     {
-        if (!HasClass(await GetPlayerClassAsync(), PausedClass))
+        cancellationToken.ThrowIfCancellationRequested();
+        var playerClass = await GetPlayerClassAsync();
+        if (HasClass(playerClass, EndedClass) || !HasClass(playerClass, PausedClass))
         {
             return;
         }
 
         var playButton = GetPlayButton();
-        if (await IsUsableAsync(playButton))
+        if (!_usePlaybackApi && await IsUsableAsync(playButton))
         {
-            await playButton.ClickAsync(new LocatorClickOptions { Timeout = 3000 });
+            await ClickPlayOrUseApiAsync(playButton, cancellationToken);
+            return;
         }
+
+        await PlayThroughApiAsync(cancellationToken);
+    }
+
+    private async Task ClickPlayOrUseApiAsync(ILocator button, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        try
+        {
+            await button.ClickAsync(new LocatorClickOptions { Timeout = PlayClickTimeout });
+            cancellationToken.ThrowIfCancellationRequested();
+        }
+        catch (TimeoutException)
+        {
+            // 视频弹题浮层可能截获鼠标事件，即使播放按钮可见也无法点击。
+            // 使用原播放器的播放接口，不移除浮层或伪造任务完成状态。
+            _usePlaybackApi = true;
+            await PlayThroughApiAsync(cancellationToken);
+        }
+    }
+
+    private async Task PlayThroughApiAsync(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var resumed = await GetVideoElement().EvaluateAsync<bool>("""
+            async element => {
+                if (element.ended || !element.paused) return true;
+                const win = element.ownerDocument.defaultView;
+                const root = element.closest('.video-js, #video');
+                const player = root?.id && typeof win.videojs?.getPlayer === 'function'
+                    ? win.videojs.getPlayer(root.id) : null;
+                let timer;
+                try {
+                    // 复用已创建的 Video.js 实例，旧播放器则使用原生 media.play()。
+                    // play() 可能长期 pending，因此只等待有限时间并核对真实播放状态。
+                    const playback = player ? player.play() : element.play();
+                    await Promise.race([
+                        Promise.resolve(playback),
+                        new Promise(resolve => { timer = setTimeout(resolve, 1500); })
+                    ]);
+                    return element.ended || !element.paused;
+                } catch {
+                    return false;
+                } finally {
+                    clearTimeout(timer);
+                }
+            }
+            """).WaitAsync(cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
+        if (!resumed)
+            throw new InvalidOperationException("视频未能恢复播放，请检查视频弹题或浏览器播放限制。");
     }
 
     private async Task ApplyPlaybackSettingsAsync()
