@@ -514,25 +514,32 @@ public sealed class XxtQuestion
         }
     }
 
-    public async Task<byte[]?> CaptureImageAsync(
+    public async Task<byte[]> CaptureImageAsync(
         CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        try
+        // 可见性等待与截图共用预算，避免两个步骤各等待 10 秒。
+        const int timeout = 10_000;
+        var timer = Stopwatch.StartNew();
+        // 文本题只截取题干，编辑器工具栏及已有答案不应混入 OCR。
+        var target = IsFillInBlank || IsTextAnswer ? _container.Locator("div.Zy_TItle.clearfix").First : _container;
+        await target.WaitForAsync(new LocatorWaitForOptions
         {
-            // 文本题只截取题干，编辑器工具栏及已有答案不应混入 OCR。
-            var target = IsFillInBlank || IsTextAnswer ? _container.Locator("div.Zy_TItle.clearfix").First : _container;
-            return await target.ScreenshotAsync(new LocatorScreenshotOptions
-            {
-                Animations = ScreenshotAnimations.Disabled,
-                Type = ScreenshotType.Png,
-                Timeout = 5000
-            });
-        }
-        catch (PlaywrightException)
+            State = WaitForSelectorState.Visible,
+            Timeout = timeout
+        }).WaitAsync(cancellationToken);
+
+        cancellationToken.ThrowIfCancellationRequested();
+        var remaining = timeout - timer.Elapsed.TotalMilliseconds;
+        if (remaining <= 0)
+            throw new TimeoutException("题目可见性等待与截图已超过 10000ms 的总时限。");
+
+        return await target.ScreenshotAsync(new LocatorScreenshotOptions
         {
-            return null;
-        }
+            Animations = ScreenshotAnimations.Disabled,
+            Type = ScreenshotType.Png,
+            Timeout = (float)remaining
+        }).WaitAsync(cancellationToken);
     }
 }
 

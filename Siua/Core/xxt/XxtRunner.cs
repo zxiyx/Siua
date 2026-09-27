@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Playwright;
@@ -255,9 +256,19 @@ public sealed class XxtRunner
         if (!question.IsFillInBlank && !question.IsTextAnswer && question.Answers.Count == 0)
             return DisableAutoTest($"题型 {question.QuestionType ?? "未知"} 未识别到支持的答题控件，请手动处理，已关闭自动答题");
 
-        var image = await question.CaptureImageAsync(cancellationToken);
-        if (image is null)
-            return DisableAutoTest("题目截图失败，已关闭自动答题");
+        byte[] image;
+        try
+        {
+            image = await question.CaptureImageAsync(cancellationToken);
+        }
+        catch (Exception exception) when (exception is TimeoutException or PlaywrightException)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var number = Regex.Match(question.Number, @"^\s*(?:第\s*)?(\d+)");
+            var questionNumber = number.Success ? number.Groups[1].Value : questionIndex.ToString();
+            LogError($"第 {questionNumber} 题截图失败，任务已停止：{exception}");
+            return false;
+        }
 
         var questionText = await _ocrService.RecognizeAsync(image, cancellationToken);
 
