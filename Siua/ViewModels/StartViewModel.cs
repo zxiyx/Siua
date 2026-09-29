@@ -41,6 +41,17 @@ public partial class StartViewModel :PageBase
     private readonly Dictionary<string, string> _selectedCourseByPlatform =
         new(StringComparer.Ordinal);
     private ObservableCollection<string> _observedCourses;
+    private LoginPreferences _observedLogin;
+    private bool _refreshingAccounts;
+    public ObservableCollection<LoginAccount> LoginAccounts { get; } = [];
+    [ObservableProperty] private LoginAccount? _selectedLoginAccount;
+    public bool IsAutoLoginSupported => SelectedPlatform == LearningPlatformCatalog.XueXiTong;
+    public bool CanConfigureAutoLogin => !IsRunning && IsAutoLoginSupported;
+    public bool CanSelectLoginAccount => CanConfigureAutoLogin && Settings.Login.Enabled && LoginAccounts.Count > 0;
+    public string AutoLoginDescription => !IsAutoLoginSupported ? "当前平台需手动登录，可在设置中预先保存账号"
+        : LoginAccounts.Count == 0 ? "请先在设置 → 账号管理中添加账号"
+        : Settings.Login.Enabled && SelectedLoginAccount is null ? "请选择用于本次登录的账号"
+        : "启动时自动填写账号密码，验证码需手动完成";
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(StartRunningCommand))]
     private string? _selectedCourse;
@@ -69,6 +80,10 @@ public partial class StartViewModel :PageBase
         _observedCourses = Settings.Courses;
         _observedCourses.CollectionChanged += OnCoursesChanged;
         Settings.PropertyChanged += OnSettingsPropertyChanged;
+        _observedLogin = Settings.Login;
+        _observedLogin.PropertyChanged += OnLoginChanged;
+        Settings.Accounts.CollectionChanged += (_, _) => RefreshLoginAccounts();
+        RefreshLoginAccounts();
         RefreshSelectedCourse();
     }
     partial void OnSelectedPlatformChanged(string value)
@@ -77,6 +92,7 @@ public partial class StartViewModel :PageBase
         OnPropertyChanged(nameof(IsSelectedPlatformSupported));
         OnPropertyChanged(nameof(PlatformAvailabilityText));
         RefreshSelectedCourse();
+        RefreshLoginAccounts();
         StartRunningCommand.NotifyCanExecuteChanged();
     }
 
@@ -91,6 +107,8 @@ public partial class StartViewModel :PageBase
     partial void OnIsRunningChanged(bool value)
     {
         OnPropertyChanged(nameof(RunButtonText));
+        OnPropertyChanged(nameof(CanConfigureAutoLogin));
+        OnPropertyChanged(nameof(CanSelectLoginAccount));
         StartRunningCommand.NotifyCanExecuteChanged();
     }
 
@@ -98,7 +116,44 @@ public partial class StartViewModel :PageBase
         ? _mainLoopRunning
         : IsSelectedPlatformSupported &&
           SelectedCourse is not null &&
-          Settings.Courses.Contains(SelectedCourse);
+          Settings.Courses.Contains(SelectedCourse) &&
+          (!IsAutoLoginSupported || !Settings.Login.Enabled || SelectedLoginAccount is not null);
+
+    partial void OnSelectedLoginAccountChanged(LoginAccount? value)
+    {
+        if (!_refreshingAccounts) Settings.Login.SelectedAccountId = value?.Id;
+        NotifyLoginState();
+    }
+
+    private void OnLoginChanged(object? sender, PropertyChangedEventArgs args)
+    {
+        if (args.PropertyName == nameof(LoginPreferences.SelectedAccountId)) RefreshLoginAccounts();
+        else NotifyLoginState();
+    }
+
+    private void RefreshLoginAccounts()
+    {
+        if (_refreshingAccounts) return;
+        _refreshingAccounts = true;
+        try
+        {
+            var selectedId = Settings.Login.SelectedAccountId;
+            LoginAccounts.Clear();
+            foreach (var account in Settings.Accounts.Where(a => a.Platform == Settings.CurrentPlatform)) LoginAccounts.Add(account);
+            SelectedLoginAccount = LoginAccounts.FirstOrDefault(a => a.Id == selectedId);
+        }
+        finally { _refreshingAccounts = false; }
+        NotifyLoginState();
+    }
+
+    private void NotifyLoginState()
+    {
+        OnPropertyChanged(nameof(IsAutoLoginSupported));
+        OnPropertyChanged(nameof(CanConfigureAutoLogin));
+        OnPropertyChanged(nameof(CanSelectLoginAccount));
+        OnPropertyChanged(nameof(AutoLoginDescription));
+        StartRunningCommand.NotifyCanExecuteChanged();
+    }
 
     [RelayCommand(AllowConcurrentExecutions = true, CanExecute = nameof(CanStartRunning))]
     public async Task StartRunning()
@@ -187,6 +242,13 @@ public partial class StartViewModel :PageBase
 
     private void OnSettingsPropertyChanged(object? sender, PropertyChangedEventArgs eventArgs)
     {
+        if (eventArgs.PropertyName == nameof(GlobalSettings.Login))
+        {
+            _observedLogin.PropertyChanged -= OnLoginChanged;
+            _observedLogin = Settings.Login;
+            _observedLogin.PropertyChanged += OnLoginChanged;
+            RefreshLoginAccounts();
+        }
         if (eventArgs.PropertyName != nameof(GlobalSettings.Courses))
             return;
 

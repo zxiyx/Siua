@@ -52,6 +52,7 @@ public  partial class App : Application
         return new MainViews().AddView<MainView, MainViewModel>(services)
             .AddView<AiSettingsView, AiSettingsViewModel>(services)
             .AddView<CourseEditView, CourseEditViewModel>(services)
+            .AddView<AccountEditView, AccountEditViewModel>(services)
             .AddView<StartView, StartViewModel>(services)
             .AddView<AboutView, AboutViewModel>(services)
             .AddView<SettingsView, SettingsViewModel>(services)

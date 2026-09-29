@@ -1,0 +1,126 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="using:Siua.ViewModels"
+             xmlns:co="using:Siua.Common"
+             xmlns:suki="https://github.com/kikipoulet/SukiUI"
+             xmlns:icons="clr-namespace:Material.Icons.Avalonia;assembly=Material.Icons.Avalonia"
+             mc:Ignorable="d" d:DesignWidth="920" d:DesignHeight="700"
+             x:Class="Siua.Views.Pages.AccountEditView"
+             x:DataType="vm:AccountEditViewModel">
+    <ScrollViewer HorizontalScrollBarVisibility="Disabled">
+        <StackPanel Margin="26" Spacing="18" MaxWidth="940" HorizontalAlignment="Stretch">
+            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
+                <Button Classes="Flat Icon" Width="38" Height="38" Command="{Binding CloseCommand}"
+                        ToolTip.Tip="返回设置">
+                    <icons:MaterialIcon Kind="ArrowLeft" Width="22" Height="22"/>
+                </Button>
+                <StackPanel Grid.Column="1" Spacing="3" VerticalAlignment="Center">
+                    <TextBlock Text="账号管理" FontSize="27" FontWeight="SemiBold"/>
+                    <TextBlock FontSize="14" Foreground="{DynamicResource SukiLowText}">
+                        <Run Text="当前平台："/><Run Text="{Binding Settings.CurrentPlatform}"/>
+                        <Run Text=" · 每个平台的登录账号独立保存"/>
+                    </TextBlock>
+                </StackPanel>
+            </Grid>
+
+            <suki:InfoBar Message="{Binding InfoMessage}" co:InfoBarExtensions.Severity="{Binding InfoSeverity}"
+                          IsClosable="True" IsOpen="{Binding IsInfoOpen, Mode=TwoWay}" IsVisible="{Binding IsInfoOpen}"/>
+
+            <suki:GlassCard CornerRadius="14">
+                <suki:BusyArea IsBusy="{Binding IsSaving}">
+                    <StackPanel Spacing="14" IsEnabled="{Binding !IsSaving}">
+                        <StackPanel Orientation="Horizontal" Spacing="9">
+                            <icons:MaterialIcon Kind="Account" Width="22" Height="22"
+                                                Foreground="{DynamicResource SukiPrimaryColor}"/>
+                            <TextBlock Text="{Binding EditorTitle}" FontSize="17" FontWeight="SemiBold"/>
+                        </StackPanel>
+                        <Grid ColumnDefinitions="*,1.2*,1.2*" ColumnSpacing="14">
+                            <StackPanel Spacing="7">
+                                <TextBlock Text="账号备注" FontSize="13"/>
+                                <TextBox Text="{Binding AccountName}" Classes="clearButton"
+                                         PlaceholderText="可选，便于区分账号" MaxLength="40"/>
+                            </StackPanel>
+                            <StackPanel Grid.Column="1" Spacing="7">
+                                <TextBlock Text="登录账号" FontSize="13"/>
+                                <TextBox Text="{Binding Username}" Classes="clearButton"
+                                         PlaceholderText="手机号 / 平台账号" MaxLength="100"
+                                         suki:TextBoxExtensions.Prefix="{icons:MaterialIconExt Kind=Account}"/>
+                            </StackPanel>
+                            <StackPanel Grid.Column="2" Spacing="7">
+                                <TextBlock Text="登录密码" FontSize="13"/>
+                                <TextBox Text="{Binding Password}" PasswordChar="●" MaxLength="256"
+                                         PlaceholderText="{Binding PasswordHint}"
+                                         suki:TextBoxExtensions.Prefix="{icons:MaterialIconExt Kind=Lock}"/>
+                            </StackPanel>
+                        </Grid>
+                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="14">
+                            <TextBlock Text="选择下方账号可编辑，密码留空则保留原密码" FontSize="12"
+                                       VerticalAlignment="Center" TextWrapping="Wrap"
+                                       Foreground="{DynamicResource SukiLowText}"/>
+                            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10">
+                                <Button Classes="Flat" Content="新增账号" Command="{Binding NewAccountCommand}"
+                                        suki:ButtonExtensions.Icon="{icons:MaterialIconExt Kind=Add}"/>
+                                <Button Classes="Flat" MinWidth="112" Content="保存账号" Command="{Binding SaveAccountCommand}"
+                                        suki:ButtonExtensions.Icon="{icons:MaterialIconExt Kind=ContentSave}"/>
+                            </StackPanel>
+                        </Grid>
+                    </StackPanel>
+                </suki:BusyArea>
+            </suki:GlassCard>
+
+            <Grid ColumnDefinitions="2*,*" ColumnSpacing="18">
+                <suki:GlassCard CornerRadius="14">
+                    <Grid RowDefinitions="Auto,*,Auto" RowSpacing="13" MinHeight="330" IsEnabled="{Binding !IsSaving}">
+                        <Grid ColumnDefinitions="*,Auto">
+                            <StackPanel Orientation="Horizontal" Spacing="9">
+                                <icons:MaterialIcon Kind="Account" Width="22" Height="22"
+                                                    Foreground="{DynamicResource SukiPrimaryColor}"/>
+                                <TextBlock Text="账号列表" FontSize="17" FontWeight="SemiBold"/>
+                            </StackPanel>
+                            <TextBlock Grid.Column="1" VerticalAlignment="Center" Foreground="{DynamicResource SukiLowText}">
+                                <Run Text="共 "/><Run Text="{Binding Accounts.Count}"/><Run Text=" 项"/>
+                            </TextBlock>
+                        </Grid>
+                        <Grid Grid.Row="1">
+                            <ListBox ItemsSource="{Binding Accounts}" SelectedItem="{Binding SelectedAccount}" MaxHeight="360">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate x:DataType="co:LoginAccount">
+                                        <TextBlock Text="{Binding DisplayName}" Margin="4,6" TextTrimming="CharacterEllipsis"/>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+                            <TextBlock IsVisible="{Binding !Accounts.Count}" Text="还没有保存账号，请在上方添加"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="13"
+                                       IsHitTestVisible="False" Foreground="{DynamicResource SukiLowText}"/>
+                        </Grid>
+                        <Grid Grid.Row="2" ColumnDefinitions="*,Auto" ColumnSpacing="10">
+                            <TextBlock Text="选择列表中的账号后可编辑或删除" FontSize="12" TextWrapping="Wrap"
+                                       VerticalAlignment="Center" Foreground="{DynamicResource SukiLowText}"/>
+                            <Button Grid.Column="1" Classes="Flat" Content="删除选中" Command="{Binding DeleteAccountCommand}"
+                                    suki:ButtonExtensions.Icon="{icons:MaterialIconExt Kind=DeleteOutline}"/>
+                        </Grid>
+                    </Grid>
+                </suki:GlassCard>
+
+                <suki:GlassCard Grid.Column="1" CornerRadius="14">
+                    <StackPanel Spacing="12">
+                        <icons:MaterialIcon Kind="InformationOutline" Width="30" Height="30"
+                                            Foreground="{DynamicResource SukiPrimaryColor}"/>
+                        <TextBlock Text="使用说明" FontSize="17" FontWeight="SemiBold"/>
+                        <TextBlock Text="保存账号后，在开始页勾选「自动登录」并选择对应账号。"
+                                   TextWrapping="Wrap" FontSize="13" LineHeight="20"
+                                   Foreground="{DynamicResource SukiLowText}"/>
+                        <Separator/>
+                        <TextBlock Text="{Binding PlatformHint}" TextWrapping="Wrap" FontSize="13" LineHeight="20"
+                                   Foreground="{DynamicResource SukiLowText}"/>
+                        <TextBlock Text="密码在本机加密保存，列表中仅显示账号备注与脱敏账号。"
+                                   TextWrapping="Wrap" FontSize="13" LineHeight="20"
+                                   Foreground="{DynamicResource SukiLowText}"/>
+                    </StackPanel>
+                </suki:GlassCard>
+            </Grid>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

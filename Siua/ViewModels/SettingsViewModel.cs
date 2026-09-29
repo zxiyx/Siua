@@ -35,13 +35,16 @@ public partial class SettingsViewModel : PageBase
         : errorMessage;
     public AiSettingsViewModel AiSettings { get; }
     public CourseEditViewModel CourseEditor { get; }
+    public AccountEditViewModel AccountEditor { get; }
     
     public SettingsViewModel(GlobalSettings globalSettings, AiSettingsViewModel aiSettings,
-        CourseEditViewModel courseEditor) : base("设置", MaterialIconKind.Settings, 1000)
+        CourseEditViewModel courseEditor, AccountEditViewModel accountEditor) : base("设置", MaterialIconKind.Settings, 1000)
     {
         _settings = globalSettings;
         AiSettings = aiSettings;
         CourseEditor = courseEditor;
+        AccountEditor = accountEditor;
+        AccountEditor.RequestClose += CloseSubPage;
         AiSettings.RequestClose += CloseSubPage;
         CourseEditor.RequestClose += CloseSubPage;
         CurrentBrowser = Settings.BrowserCannel;
@@ -57,6 +60,13 @@ public partial class SettingsViewModel : PageBase
 
     [RelayCommand]
     private void ShowCourseList() => ActiveSubPage = CourseEditor;
+
+    [RelayCommand]
+    private void ShowAccountList()
+    {
+        AccountEditor.ResetEditor();
+        ActiveSubPage = AccountEditor;
+    }
 
     private void CloseSubPage() => ActiveSubPage = null;
 

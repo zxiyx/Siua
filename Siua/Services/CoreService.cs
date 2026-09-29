@@ -38,6 +38,7 @@ public sealed class CoreService : ICoreService
     private string? _activeCourseUrl;
     private int _sessionEnded;
     private int _isDisposing;
+    private bool _loginInProgress;
 
     public CoreService(
         ILogService logService,
@@ -75,6 +76,14 @@ public sealed class CoreService : ICoreService
 
         _activePlatform = platform;
         _activeCourseUrl = validatedCourseUrl;
+        var autoLogin = platform == LearningPlatformCatalog.XueXiTong && _settings.Login.Enabled;
+        var loginAccount = autoLogin ? _settings.GetSelectedLoginAccount() : null;
+        if (autoLogin && loginAccount is null)
+        {
+            _logService.AddLog("自动登录尚未选择有效账号，请在开始页选择账号或关闭自动登录");
+            DisposeBrowserResources();
+            return false;
+        }
         _logService.AddLog($"正在启动「{platform}」任务");
 
         try
@@ -83,19 +92,33 @@ public sealed class CoreService : ICoreService
             _browser = await _playwright.Chromium.LaunchAsync(CreateBrowserOptions());
             _page = await _browser.NewPageAsync();
             RegisterSessionEvents(_browser, _page, _sessionCts);
-            _page.Console += (_, message) => _logService.AddLog($"[Browser] {message.Text}");
+            _loginInProgress = true;
+            _page.Console += (_, message) =>
+            {
+                // 登录页的第三方脚本可能打印凭据，登录期间不转发浏览器控制台。
+                if (!_loginInProgress && _page is { } page && !IsLoginPage(page.Url))
+                    _logService.AddLog($"[Browser] {message.Text}");
+            };
 
-            await _page.GotoAsync(validatedCourseUrl);
-            await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+            await _page.GotoAsync(validatedCourseUrl, new() { WaitUntil = WaitUntilState.DOMContentLoaded });
 
             if (IsLoginPage(_page.Url))
             {
-                _logService.AddLog("检测到登录界面，请先登录");
+                if (loginAccount is not null)
+                {
+                    string? password = null;
+                    try { password = AccountPasswordProtector.Unprotect(loginAccount.EncryptedPassword); }
+                    catch { _logService.AddLog("已保存的密码无法读取，请重新编辑账号；本次可在浏览器中手动登录"); }
+                    if (!string.IsNullOrEmpty(password))
+                        await XxtLoginAutomation.SubmitOnceAsync(_page, loginAccount.Username, password, _logService, GetSessionToken());
+                }
+                else _logService.AddLog("检测到登录界面，请先登录");
                 _logService.AddLog("等待登录中...");
                 await _page.WaitForURLAsync(GetAuthenticatedUrlPattern(), new PageWaitForURLOptions
                 {
-                    Timeout = 300_000
-                });
+                    Timeout = 300_000,
+                    WaitUntil = WaitUntilState.DOMContentLoaded
+                }).WaitAsync(GetSessionToken());
             }
 
             if (!IsSessionActive || IsLoginPage(_page.Url))
@@ -105,8 +128,13 @@ public sealed class CoreService : ICoreService
             }
 
             _logService.AddLog("登录成功");
+            _loginInProgress = false;
             StartLoginHeartbeat();
             return true;
+        }
+        catch (OperationCanceledException) when (!IsSessionActive)
+        {
+            return false;
         }
         catch (Exception exception) when (!IsSessionActive || exception is PlaywrightException)
         {

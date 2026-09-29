@@ -46,6 +46,16 @@
                             <Button Grid.Column="2" Classes="Flat" Content="管理课程" Command="{Binding ShowCourseListCommand}"
                                     p:ButtonExtensions.Icon="{icons:MaterialIconExt Kind=ArrowRight}"/>
                         </Grid>
+                        <Separator/>
+                        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="13">
+                            <icons:MaterialIcon Kind="Account" Width="22" Height="22" Foreground="{DynamicResource SukiLowText}"/>
+                            <StackPanel Grid.Column="1">
+                                <TextBlock Text="账号管理" FontWeight="SemiBold"/>
+                                <TextBlock Text="维护当前平台的自动登录账号" FontSize="12" Foreground="{DynamicResource SukiLowText}"/>
+                            </StackPanel>
+                            <Button Grid.Column="2" Classes="Flat" Content="管理账号" Command="{Binding ShowAccountListCommand}"
+                                    p:ButtonExtensions.Icon="{icons:MaterialIconExt Kind=ArrowRight}"/>
+                        </Grid>
                     </StackPanel>
                 </suki:GlassCard>
 

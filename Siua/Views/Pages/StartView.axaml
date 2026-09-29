@@ -88,6 +88,23 @@
 
                     <Separator/>
 
+                    <Grid ColumnDefinitions="*,360" ColumnSpacing="16">
+                        <StackPanel VerticalAlignment="Center" Spacing="3">
+                            <TextBlock Text="自动登录" FontWeight="SemiBold"/>
+                            <TextBlock Text="{Binding AutoLoginDescription}" TextWrapping="Wrap" FontSize="12"
+                                       Foreground="{DynamicResource SukiLowText}"/>
+                        </StackPanel>
+                        <Grid Grid.Column="1" ColumnDefinitions="Auto,*" ColumnSpacing="12">
+                            <CheckBox Content="启用" IsChecked="{Binding Settings.Login.Enabled, Mode=TwoWay}"
+                                      IsEnabled="{Binding CanConfigureAutoLogin}" VerticalAlignment="Center"/>
+                            <ComboBox Grid.Column="1" ItemsSource="{Binding LoginAccounts}" SelectedItem="{Binding SelectedLoginAccount}"
+                                      IsEnabled="{Binding CanSelectLoginAccount}" PlaceholderText="选择登录账号" Height="34"
+                                      HorizontalAlignment="Stretch"/>
+                        </Grid>
+                    </Grid>
+
+                    <Separator/>
+
                     <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
                         <StackPanel>
                             <TextBlock Text="启动学习" FontWeight="SemiBold"/>

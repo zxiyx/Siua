@@ -23,6 +23,8 @@ internal sealed class SettingsSnapshot
     public bool AutoTest { get; set; }
     public bool RandomTest { get; set; }
     public Dictionary<string, string[]> CoursesByPlatform { get; set; } = [];
+    public LoginAccount[] Accounts { get; set; } = [];
+    public Dictionary<string, LoginPreferences> LoginByPlatform { get; set; } = [];
 
     [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
     public string[]? Courses { get; set; }

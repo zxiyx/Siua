@@ -23,6 +23,9 @@ public partial class GlobalSettings : ObservableObject, IDisposable
     private readonly SettingsStorage _storage;
     private readonly Dictionary<string, ObservableCollection<string>> _coursesByPlatform =
         new(StringComparer.Ordinal);
+    private readonly Dictionary<string, LoginPreferences> _loginByPlatform = new(StringComparer.Ordinal);
+    public ObservableCollection<LoginAccount> Accounts { get; } = [];
+    [JsonIgnore] public LoginPreferences Login => GetOrCreateLogin(CurrentPlatform);
     private CancellationTokenSource? _saveDelayCts;
     private bool _isLoading;
     private bool _isInitialized;
@@ -63,6 +66,7 @@ public partial class GlobalSettings : ObservableObject, IDisposable
 
         PropertyChanged += HandleSettingsChanged;
         Courses.CollectionChanged += HandleCollectionChanged;
+        Accounts.CollectionChanged += HandleAccountsChanged;
         CurrentAi.PropertyChanged += HandleSettingsChanged;
     }
 
@@ -108,6 +112,8 @@ public partial class GlobalSettings : ObservableObject, IDisposable
 
         PropertyChanged -= HandleSettingsChanged;
         Courses.CollectionChanged -= HandleCollectionChanged;
+        Accounts.CollectionChanged -= HandleAccountsChanged;
+        foreach (var login in _loginByPlatform.Values) login.PropertyChanged -= HandleSettingsChanged;
         CurrentAi.PropertyChanged -= HandleSettingsChanged;
         CancelScheduledSave();
 
@@ -136,6 +142,34 @@ public partial class GlobalSettings : ObservableObject, IDisposable
     partial void OnCurrentPlatformChanged(string value)
     {
         Courses = GetOrCreateCourses(value);
+        OnPropertyChanged(nameof(Login));
+    }
+
+    public LoginAccount? GetSelectedLoginAccount() => Accounts.FirstOrDefault(account =>
+        account.Platform == CurrentPlatform && account.Id == Login.SelectedAccountId);
+
+    private LoginPreferences GetOrCreateLogin(string platform)
+    {
+        if (_loginByPlatform.TryGetValue(platform, out var login)) return login;
+        login = new LoginPreferences();
+        login.PropertyChanged += HandleSettingsChanged;
+        _loginByPlatform[platform] = login;
+        return login;
+    }
+
+    private void HandleAccountsChanged(object? sender, NotifyCollectionChangedEventArgs args)
+    {
+        if (!_isLoading)
+        {
+            foreach (var pair in _loginByPlatform)
+                if (pair.Value.SelectedAccountId is { } id &&
+                    !Accounts.Any(account => account.Id == id && account.Platform == pair.Key))
+                {
+                    pair.Value.SelectedAccountId = null;
+                    pair.Value.Enabled = false;
+                }
+        }
+        HandleCollectionChanged(sender, args);
     }
 
     partial void OnCurrentAiChanging(AiModelBase value)
@@ -253,6 +287,9 @@ public partial class GlobalSettings : ObservableObject, IDisposable
         RegionScreenshot = RegionScreenshot,
         AutoTest = AutoTest,
         RandomTest = RandomTest,
+        Accounts = Accounts.ToArray(),
+        LoginByPlatform = _loginByPlatform.ToDictionary(pair => pair.Key,
+            pair => new LoginPreferences { Enabled = pair.Value.Enabled, SelectedAccountId = pair.Value.SelectedAccountId }),
         CoursesByPlatform = _coursesByPlatform.ToDictionary(
             pair => pair.Key,
             pair => pair.Value.ToArray(),
@@ -305,6 +342,23 @@ public partial class GlobalSettings : ObservableObject, IDisposable
         RegionScreenshot = snapshot.RegionScreenshot;
         AutoTest = snapshot.AutoTest;
         RandomTest = snapshot.RandomTest;
+
+        Accounts.Clear();
+        foreach (var account in (snapshot.Accounts ?? []).Where(account => account is not null &&
+                     !string.IsNullOrWhiteSpace(account.Id) && !string.IsNullOrWhiteSpace(account.Username) &&
+                     LearningPlatformCatalog.IsSupported(account.Platform)).DistinctBy(account => account.Id))
+            Accounts.Add(account);
+        foreach (var login in _loginByPlatform.Values) login.PropertyChanged -= HandleSettingsChanged;
+        _loginByPlatform.Clear();
+        foreach (var pair in snapshot.LoginByPlatform ?? [])
+        {
+            if (!LearningPlatformCatalog.IsSupported(pair.Key) || pair.Value is null) continue;
+            var login = GetOrCreateLogin(pair.Key);
+            login.SelectedAccountId = Accounts.Any(account => account.Platform == pair.Key && account.Id == pair.Value.SelectedAccountId)
+                ? pair.Value.SelectedAccountId : null;
+            login.Enabled = pair.Value.Enabled && login.SelectedAccountId is not null;
+        }
+        OnPropertyChanged(nameof(Login));
 
         var ai = snapshot.CurrentAi ?? new AiSettingsSnapshot();
         CurrentAi.AiProvider = ai.AiProvider;
