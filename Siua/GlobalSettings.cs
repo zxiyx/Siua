@@ -56,6 +56,7 @@ public partial class GlobalSettings : ObservableObject, IDisposable
 
     [JsonIgnore] public string SettingsFilePath => _storage.SettingsFilePath;
     [JsonIgnore] public string? LastSaveError => _storage.LastError;
+    [JsonIgnore] internal Exception? LastSaveException => _storage.LastException;
 
     public GlobalSettings(string? storageDirectory = null)
     {

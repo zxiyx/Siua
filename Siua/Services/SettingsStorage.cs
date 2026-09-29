@@ -30,6 +30,7 @@ internal sealed class SettingsStorage
     public string StorageDirectory { get; }
     public string SettingsFilePath { get; }
     public string? LastError { get; private set; }
+    public Exception? LastException { get; private set; }
 
     private string BackupFilePath => SettingsFilePath + ".bak";
     private string TemporaryFilePath => SettingsFilePath + ".tmp";
@@ -80,10 +81,12 @@ internal sealed class SettingsStorage
             }
 
             LastError = null;
+            LastException = null;
         }
         catch (Exception exception)
         {
             LastError = exception.Message;
+            LastException = exception;
             Debug.WriteLine($"Save settings failed: {exception}");
         }
         finally

@@ -7,6 +7,7 @@ using Avalonia.Controls.Notifications;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Siua.Common;
+using Siua.Interfaces;
 using Siua.Services;
 
 namespace Siua.ViewModels;
@@ -14,12 +15,14 @@ namespace Siua.ViewModels;
 public partial class AccountEditViewModel : ViewModelBase
 {
     public Action? RequestClose;
+    private readonly ILogService _logService;
     public GlobalSettings Settings { get; }
     public ObservableCollection<LoginAccount> Accounts { get; } = [];
     [ObservableProperty] private LoginAccount? _selectedAccount;
-    [ObservableProperty] private string _accountName = "";
-    [ObservableProperty] private string _username = "";
-    [ObservableProperty] private string _password = "";
+    // TextBox 清空时可回传 null，不能仅依赖字段的初始空字符串。
+    [ObservableProperty] private string? _accountName = "";
+    [ObservableProperty] private string? _username = "";
+    [ObservableProperty] private string? _password = "";
     [ObservableProperty] private bool _isSaving;
     [ObservableProperty] private bool _isInfoOpen;
     [ObservableProperty] private string _infoMessage = "";
@@ -30,9 +33,10 @@ public partial class AccountEditViewModel : ViewModelBase
         ? "手机号或超星号登录；验证码、二次验证需在浏览器中完成。"
         : "可先保存账号；当前智慧树仍需在浏览器中手动登录。";
 
-    public AccountEditViewModel(GlobalSettings settings)
+    public AccountEditViewModel(GlobalSettings settings, ILogService? logService = null)
     {
         Settings = settings;
+        _logService = logService ?? new LogService();
         Settings.Accounts.CollectionChanged += (_, _) => RefreshAccounts();
         Settings.PropertyChanged += (_, args) =>
         {
@@ -63,8 +67,8 @@ public partial class AccountEditViewModel : ViewModelBase
         SaveAccountCommand.NotifyCanExecuteChanged();
         DeleteAccountCommand.NotifyCanExecuteChanged();
     }
-    partial void OnUsernameChanged(string value) => SaveAccountCommand.NotifyCanExecuteChanged();
-    partial void OnPasswordChanged(string value) => SaveAccountCommand.NotifyCanExecuteChanged();
+    partial void OnUsernameChanged(string? value) => SaveAccountCommand.NotifyCanExecuteChanged();
+    partial void OnPasswordChanged(string? value) => SaveAccountCommand.NotifyCanExecuteChanged();
     partial void OnIsSavingChanged(bool value)
     {
         SaveAccountCommand.NotifyCanExecuteChanged();
@@ -74,7 +78,7 @@ public partial class AccountEditViewModel : ViewModelBase
     }
     private bool CanEdit() => !IsSaving;
     private bool CanSave() => !IsSaving && !string.IsNullOrWhiteSpace(Username) &&
-        (Password.Length > 0 || SelectedAccount is not null);
+        (!string.IsNullOrEmpty(Password) || SelectedAccount is not null);
     private bool CanDelete() => !IsSaving && SelectedAccount is not null;
 
     [RelayCommand(CanExecute = nameof(CanEdit))]
@@ -88,36 +92,53 @@ public partial class AccountEditViewModel : ViewModelBase
     [RelayCommand(CanExecute = nameof(CanSave))]
     private async Task SaveAccount()
     {
-        var username = Username.Trim();
-        if (Settings.Accounts.Any(a => a.Platform == Settings.CurrentPlatform && a.Id != SelectedAccount?.Id &&
+        if (!CanSave()) return;
+        var username = Username!.Trim();
+        var name = AccountName?.Trim() ?? "";
+        var password = Password ?? "";
+        var selected = SelectedAccount;
+        var platform = Settings.CurrentPlatform;
+        if (Settings.Accounts.Any(a => a.Platform == platform && a.Id != selected?.Id &&
             string.Equals(a.Username, username, StringComparison.OrdinalIgnoreCase)))
         {
             ShowInfo("当前平台已保存此账号，请在列表中选择后编辑。", NotificationType.Warning);
             return;
         }
         IsSaving = true;
+        var stage = "密码加密";
         try
         {
+            var encryptedPassword = password.Length > 0
+                ? AccountPasswordProtector.Protect(password) : selected!.EncryptedPassword;
+            stage = "账号保存";
             var account = new LoginAccount
             {
-                Id = SelectedAccount?.Id ?? Guid.NewGuid().ToString("N"),
-                Platform = Settings.CurrentPlatform, Name = AccountName.Trim(), Username = username,
-                EncryptedPassword = Password.Length > 0 ? AccountPasswordProtector.Protect(Password) : SelectedAccount!.EncryptedPassword
+                Id = selected?.Id ?? Guid.NewGuid().ToString("N"),
+                Platform = platform, Name = name, Username = username,
+                EncryptedPassword = encryptedPassword
             };
-            var index = SelectedAccount is null ? -1 : Settings.Accounts.IndexOf(SelectedAccount);
+            var index = selected is null ? -1 : Settings.Accounts.IndexOf(selected);
             if (index < 0) Settings.Accounts.Add(account);
             else Settings.Accounts[index] = account;
             Settings.Login.SelectedAccountId ??= account.Id;
+            stage = "账号配置写入";
             await Settings.SaveToJson();
-            SelectedAccount = account;
-            Password = "";
-            ShowInfo(Settings.LastSaveError is null ? "账号已保存" : "写入失败，请检查设置目录权限后重试。",
-                Settings.LastSaveError is null ? NotificationType.Success : NotificationType.Error);
+            if (Settings.LastSaveException is { } saveException)
+            {
+                ReportFailure(stage, saveException, username, password, name);
+                return;
+            }
+            stage = "保存结果更新";
+            if (Settings.CurrentPlatform == platform)
+            {
+                SelectedAccount = account;
+                Password = "";
+            }
+            ShowInfo("账号已保存", NotificationType.Success);
         }
-        catch
+        catch (Exception exception)
         {
-            // 加密异常和输入内容不写入普通日志，避免泄露凭据。
-            ShowInfo("密码保存失败，请在当前 Windows 用户下重试。", NotificationType.Error);
+            ReportFailure(stage, exception, username, password, name, selected?.Username, selected?.Name);
         }
         finally { IsSaving = false; }
     }
@@ -126,15 +147,19 @@ public partial class AccountEditViewModel : ViewModelBase
     private async Task DeleteAccount()
     {
         if (SelectedAccount is null) return;
+        var account = SelectedAccount;
+        var password = Password;
         IsSaving = true;
         try
         {
-            Settings.Accounts.Remove(SelectedAccount);
+            Settings.Accounts.Remove(account);
             NewAccount();
             await Settings.SaveToJson();
-            ShowInfo(Settings.LastSaveError is null ? "账号已删除" : "删除尚未写入磁盘，请检查设置目录权限后重试。",
-                Settings.LastSaveError is null ? NotificationType.Success : NotificationType.Error);
+            if (Settings.LastSaveException is { } exception)
+                ReportFailure("账号删除写入", exception, account.Username, account.Name, password);
+            else ShowInfo("账号已删除", NotificationType.Success);
         }
+        catch (Exception exception) { ReportFailure("账号删除", exception, account.Username, account.Name, password); }
         finally { IsSaving = false; }
     }
 
@@ -152,5 +177,20 @@ public partial class AccountEditViewModel : ViewModelBase
         InfoMessage = message;
         InfoSeverity = severity;
         IsInfoOpen = true;
+    }
+
+    private void ReportFailure(string stage, Exception exception, params string?[] sensitiveValues)
+    {
+        // 使用保存前捕获的输入脱敏，列表刷新清空表单后也不能漏掉凭据。
+        var details = "";
+        for (var current = exception; current is not null; current = current.InnerException)
+        {
+            var message = current.Message;
+            foreach (var value in sensitiveValues.Where(value => !string.IsNullOrEmpty(value)).Distinct().OrderByDescending(value => value!.Length))
+                message = message.Replace(value!, "[已隐藏]", StringComparison.Ordinal);
+            details += $"{current.GetType().FullName} (0x{current.HResult:X8})：{message}{Environment.NewLine}{current.StackTrace}{Environment.NewLine}";
+        }
+        _logService.AddLog(LogLevel.Error, "Account", $"{stage}失败：{Environment.NewLine}{details}");
+        ShowInfo($"{stage}失败，请检查 Log/Log.txt 文件。", NotificationType.Error);
     }
 }
