@@ -164,6 +164,10 @@ public partial class StartViewModel :PageBase
         {
             await _pix2TextService.EnsureReadyAsync();
         }
+        catch (OperationCanceledException)
+        {
+            // 用户停止或修改服务地址会取消启动，属于正常操作。
+        }
         finally
         {
             IsStartingPix2Text = false;

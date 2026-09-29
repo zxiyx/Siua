@@ -383,6 +383,7 @@ public sealed class CoreService : ICoreService
         return _activePlatform switch
         {
             LearningPlatformCatalog.XueXiTong => "**/mooc1.chaoxing.com/**",
+            //LearningPlatformCatalog.XueXiTong => "**/{mooc1,mooc2-ans}.chaoxing.com/**",
             LearningPlatformCatalog.ZhiHuiShu => "**/wisdom-mooc.zhihuishu.com/**",
             _ => throw new InvalidOperationException("当前任务没有有效的平台适配器。")
         };

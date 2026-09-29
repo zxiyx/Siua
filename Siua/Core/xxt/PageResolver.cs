@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Playwright;
@@ -42,30 +43,25 @@ public sealed class XxtPageResolver
     public bool HasDoc => _docs.Count > 0;
     public bool HasResolutionErrors { get; private set; }
 
-    public async Task<bool> WaitLoadingAsync()
+    internal IFrame MainFrame => _mainFrame ?? throw new InvalidOperationException("章节尚未加载。");
+
+    public async Task<bool> WaitLoadingAsync(CancellationToken cancellationToken = default)
     {
         try
         {
-            var frameLocator = _page.Locator(MainFrameSelector).First;
-            await frameLocator.WaitForAsync();
-            var frameElement = await frameLocator.ElementHandleAsync();
-            _mainFrame = frameElement is null ? null : await frameElement.ContentFrameAsync();
-            if (_mainFrame is null)
-            {
-                return false;
-            }
-
-            await WaitForFrameContentAsync(_mainFrame, frameLocator);
+            _mainFrame = await WaitForStableChapterAsync(cancellationToken, 30_000);
             return true;
         }
         catch (Exception exception) when (exception is PlaywrightException or TimeoutException)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             _mainFrame = null;
+            _logService.AddLog(LogLevel.Error, "Xxt", $"章节内容加载失败：{exception}");
             return false;
         }
     }
 
-    public async Task ResolvePageAsync()
+    public async Task ResolvePageAsync(CancellationToken cancellationToken = default)
     {
         _videos.Clear();
         _docs.Clear();
@@ -82,6 +78,7 @@ public sealed class XxtPageResolver
         var videoCount = await videoContainers.CountAsync();
         for (var index = 0; index < videoCount; index++)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             _videos.Add(new XxtVideo(videoContainers.Nth(index), _settings));
         }
 
@@ -131,6 +128,7 @@ public sealed class XxtPageResolver
             }
             catch (Exception exception) when (exception is PlaywrightException or TimeoutException)
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 HasResolutionErrors = true;
                 _logService.AddLog(
                     LogLevel.Error,
@@ -233,7 +231,8 @@ public sealed class XxtPageResolver
         await submitButton.ClickAsync();
     }
 
-    public async Task<bool> NextPageAsync(CancellationToken cancellationToken = default, int timeout = 30_000)
+    public async Task<bool> NextPageAsync(CancellationToken cancellationToken = default, int timeout = 30_000,
+        Action? beforeNavigation = null)
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (await IsAtCourseEndAsync())
@@ -262,46 +261,94 @@ public sealed class XxtPageResolver
         var previousUrl = previousFrame?.Url;
         cancellationToken.ThrowIfCancellationRequested();
         _logService.AddLog(LogLevel.Info, "Xxt", "准备进入下一节...");
+        beforeNavigation?.Invoke();
         await nextButton.ClickAsync(new LocatorClickOptions { Timeout = timeout });
         await CloseChapterNoticeAsync();
 
         // 学习通通过 AJAX 替换 mainid 或只修改内容 iframe 的 src，外层 DOMContentLoaded 不会再次触发。
+        _mainFrame = await WaitForStableChapterAsync(cancellationToken, timeout, previousFrame, previousUrl);
+        return true;
+    }
+
+    private async Task<IFrame> WaitForStableChapterAsync(CancellationToken cancellationToken, int timeout,
+        IFrame? previousFrame = null, string? previousUrl = null)
+    {
         var timer = Stopwatch.StartNew();
-        while (timer.ElapsedMilliseconds < timeout)
+        var stableSince = timer.ElapsedMilliseconds;
+        (IFrame Frame, string Url)[]? lastFrames = null;
+        var navigationVersion = 0;
+        var lastVersion = -1;
+        IFrame? observedFrame = null;
+        void OnNavigated(object? sender, IFrame frame)
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            var iframe = _page.Locator(MainFrameSelector).First;
-            if (await iframe.CountAsync() > 0)
+            if (observedFrame is null || frame == _page.MainFrame || IsWithin(frame, observedFrame))
+                Interlocked.Increment(ref navigationVersion);
+        }
+        _page.FrameNavigated += OnNavigated;
+        try
+        {
+            while (timer.ElapsedMilliseconds < timeout)
             {
-                try
+                cancellationToken.ThrowIfCancellationRequested();
+                var iframe = _page.Locator(MainFrameSelector).First;
+                if (await iframe.CountAsync() > 0)
                 {
-                    var element = await iframe.ElementHandleAsync(new LocatorElementHandleOptions { Timeout = 500 });
-                    var frame = element is null ? null : await element.ContentFrameAsync();
-                    if (frame is not null && !frame.IsDetached &&
-                        (frame != previousFrame || frame.Url != previousUrl))
+                    try
                     {
-                        var source = await iframe.GetAttributeAsync("src");
-                        var sourceDocument = await iframe.GetAttributeAsync("srcdoc");
-                        var isInitialBlank = frame.Url == "about:blank" &&
-                            (sourceDocument is not null || (!string.IsNullOrWhiteSpace(source) &&
-                             !source.StartsWith("about:", StringComparison.OrdinalIgnoreCase) &&
-                             !source.StartsWith("javascript:", StringComparison.OrdinalIgnoreCase)));
-                        if (!isInitialBlank && await frame.EvaluateAsync<bool>(
-                                "() => document.readyState !== 'loading' && document.body !== null && document.body.childNodes.length > 0"))
+                        var element = await iframe.ElementHandleAsync(new LocatorElementHandleOptions { Timeout = 500 });
+                        IFrame? frame;
+                        try { frame = element is null ? null : await element.ContentFrameAsync(); }
+                        finally { if (element is not null) await element.DisposeAsync(); }
+                        observedFrame = frame;
+                        if (frame is not null && !frame.IsDetached &&
+                            (frame != previousFrame || frame.Url != previousUrl))
                         {
-                            _mainFrame = frame;
-                            return true;
+                            var source = await iframe.GetAttributeAsync("src");
+                            var sourceDocument = await iframe.GetAttributeAsync("srcdoc");
+                            var isInitialBlank = frame.Url == "about:blank" &&
+                                (sourceDocument is not null || (!string.IsNullOrWhiteSpace(source) &&
+                                 !source.StartsWith("about:", StringComparison.OrdinalIgnoreCase) &&
+                                 !source.StartsWith("javascript:", StringComparison.OrdinalIgnoreCase)));
+                            if (!isInitialBlank && await frame.EvaluateAsync<bool>(
+                                    "() => document.readyState !== 'loading' && document.body !== null && document.body.childNodes.length > 0"))
+                            {
+                                var frames = _page.Frames.Where(candidate => IsWithin(candidate, frame))
+                                    .Select(candidate => (candidate, candidate.Url)).ToArray();
+                                var version = Volatile.Read(ref navigationVersion);
+                                if (lastFrames is null || !frames.SequenceEqual(lastFrames) || version != lastVersion)
+                                {
+                                    lastFrames = frames;
+                                    lastVersion = version;
+                                    stableSince = timer.ElapsedMilliseconds;
+                                }
+                                // DOM 就绪后再观察一小段时间，避免绑定到连续替换中的过渡 iframe。
+                                else if (timer.ElapsedMilliseconds - stableSince >= 500)
+                                    return frame;
+                                await Task.Delay(100, cancellationToken);
+                                continue;
+                            }
                         }
                     }
+                    catch (Exception exception) when (exception is PlaywrightException or TimeoutException && !_page.IsClosed)
+                    {
+                        // AJAX 替换 iframe 时会短暂失去执行上下文，下一轮读取新控件。
+                    }
                 }
-                catch (Exception exception) when (exception is PlaywrightException or TimeoutException && !_page.IsClosed)
-                {
-                    // AJAX 替换 iframe 时会短暂失去执行上下文，下一轮读取新控件。
-                }
+                lastFrames = null;
+                await Task.Delay(100, cancellationToken);
             }
-            await Task.Delay(100, cancellationToken);
+            throw new TimeoutException(previousFrame is null
+                ? "章节内容未在限定时间内完成加载，请检查当前页面。"
+                : "已点击下一节，但章节内容未完成切换；已停止以避免重复处理旧章节。");
         }
-        throw new TimeoutException("已点击下一节，但章节内容未完成切换；已停止以避免重复处理旧章节。");
+        finally { _page.FrameNavigated -= OnNavigated; }
+    }
+
+    private static bool IsWithin(IFrame candidate, IFrame parent)
+    {
+        for (IFrame? current = candidate; current is not null; current = current.ParentFrame)
+            if (current == parent) return true;
+        return false;
     }
 
     private Task<bool> IsAtCourseEndAsync() => _page.EvaluateAsync<bool>("""

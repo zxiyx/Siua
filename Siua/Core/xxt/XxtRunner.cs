@@ -39,18 +39,21 @@ public sealed class XxtRunner
 
     public async Task<bool> RunAsync(CancellationToken cancellationToken = default)
     {
+        XxtChapterContext? chapter = null;
         try
         {
             cancellationToken.ThrowIfCancellationRequested();
             await _page.WaitForLoadStateAsync(LoadState.DOMContentLoaded);
             var resolver = new XxtPageResolver(_page, _settings, _logService);
-            if (!await resolver.WaitLoadingAsync())
+            if (!await resolver.WaitLoadingAsync(cancellationToken))
             {
-                LogError("当前课程页面加载失败，学习通任务已停止");
                 return false;
             }
 
-            await resolver.ResolvePageAsync();
+            chapter = new XxtChapterContext(_page, resolver.MainFrame, cancellationToken);
+            var chapterToken = chapter.Token;
+            await resolver.ResolvePageAsync(chapterToken);
+            chapterToken.ThrowIfCancellationRequested();
             if (resolver.HasResolutionErrors && (_settings.AutoTest || _settings.RandomTest))
             {
                 LogError("课程任务未能完整解析，已停止以避免漏掉章节测试");
@@ -58,19 +61,32 @@ public sealed class XxtRunner
             }
 
             if (resolver.HasTest && (_settings.AutoTest || _settings.RandomTest) &&
-                !await ProcessTestsAsync(resolver, cancellationToken))
+                !await ProcessTestsAsync(resolver, chapterToken))
             {
                 return false;
             }
 
-            if (!await ProcessVideosAsync(resolver.Videos, cancellationToken))
+            if (!await ProcessVideosAsync(resolver.Videos, chapterToken))
                 return false;
-            await ProcessDocumentsAsync(resolver.Docs, cancellationToken);
+            await ProcessDocumentsAsync(resolver.Docs, chapterToken);
 
-            if (!await resolver.NextPageAsync(cancellationToken))
+            chapterToken.ThrowIfCancellationRequested();
+            if (!await resolver.NextPageAsync(chapterToken, beforeNavigation: () =>
+                {
+                    chapterToken.ThrowIfCancellationRequested();
+                    chapter.StopObserving();
+                }))
                 return false;
             LogInfo("已进入下一节");
             await Task.Delay(_settings.ChapterJumpInterval, cancellationToken);
+            return true;
+        }
+        catch (Exception exception) when (chapter is { HasChanged: true } && !_page.IsClosed &&
+            exception is OperationCanceledException or PlaywrightException or TimeoutException or InvalidOperationException)
+        {
+            // 结束旧章节，交给主循环重新解析当前页面；不得继续点击旧章节的“下一节”。
+            cancellationToken.ThrowIfCancellationRequested();
+            LogInfo("检测到章节切换，正在重新加载当前章节...");
             return true;
         }
         catch (OperationCanceledException)
@@ -83,6 +99,7 @@ public sealed class XxtRunner
             LogError($"学习通页面处理失败，当前任务已停止：{exception}");
             return false;
         }
+        finally { chapter?.Dispose(); }
     }
 
     private async Task<bool> ProcessVideosAsync(
@@ -93,11 +110,12 @@ public sealed class XxtRunner
         {
             try
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 if (_settings.JumpCompleted && await video.IsCompletedAsync())
                     continue;
 
                 LogInfo("播放视频中...");
-                await video.InitializeAsync();
+                await video.InitializeAsync(cancellationToken);
                 await video.PlayAsync(cancellationToken);
 
                 if (_settings.TryFinishVideo)
@@ -115,6 +133,7 @@ public sealed class XxtRunner
                     return false;
                 }
 
+                cancellationToken.ThrowIfCancellationRequested();
                 LogInfo("播放完毕");
             }
             catch (OperationCanceledException)
@@ -125,6 +144,7 @@ public sealed class XxtRunner
                 exception is PlaywrightException or TimeoutException or InvalidOperationException &&
                 !_page.IsClosed)
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 LogError($"视频处理失败，已停止以避免跳过未完成视频：{exception}");
                 return false;
             }
@@ -158,6 +178,7 @@ public sealed class XxtRunner
             }
             catch (PlaywrightException exception) when (!_page.IsClosed)
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 LogError($"文档处理失败，已跳过当前任务点：{exception}");
             }
         }
@@ -171,6 +192,7 @@ public sealed class XxtRunner
         {
             try
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 await chapterTest.LoadQuestionsAsync(cancellationToken);
                 if (chapterTest.IsCompleted)
                 {
@@ -201,6 +223,7 @@ public sealed class XxtRunner
                     }
                 }
 
+                cancellationToken.ThrowIfCancellationRequested();
                 LogInfo("正在提交章节测试...");
                 await chapterTest.SubmitAnswerAsync(cancellationToken);
                 await resolver.ConfirmTestSubmissionAsync(cancellationToken);
@@ -216,6 +239,7 @@ public sealed class XxtRunner
             catch (Exception exception) when (
                 exception is PlaywrightException or TimeoutException && !_page.IsClosed)
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 LogError($"章节测试控件处理失败，已停止以避免跳过测试：{exception}");
                 return false;
             }

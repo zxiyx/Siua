@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
@@ -9,6 +9,7 @@ using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Net.Sockets;
 using System.Runtime.InteropServices;
+using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading;
@@ -25,10 +26,15 @@ public sealed class Pix2TextService : IDisposable
 
     private readonly GlobalSettings _settings;
     private readonly ILogService _logService;
-    private readonly SemaphoreSlim _installLock = new(1, 1);
     private readonly SemaphoreSlim _startLock = new(1, 1);
     private readonly HttpClient _httpClient;
-    private Process? _process;
+    private Pix2TextProcess? _process;
+    private readonly object _operationSync = new();
+    private CancellationTokenSource? _activeOperation;
+    private readonly Func<ProcessStartInfo, Process> _processFactory;
+    private readonly TimeSpan _startupTimeout;
+    private readonly string _installRoot;
+    private bool _disposed;
 
     private const string ServerBootstrap =
         "import sys; from pix2text.serve import start_server; " +
@@ -39,9 +45,18 @@ public sealed class Pix2TextService : IDisposable
     public string? ErrorMessage { get; private set; }
 
     public Pix2TextService(GlobalSettings settings, ILogService logService)
+        : this(settings, logService, info => new Process { StartInfo = info }, TimeSpan.FromMinutes(5))
+    {
+    }
+
+    internal Pix2TextService(GlobalSettings settings, ILogService logService,
+        Func<ProcessStartInfo, Process> processFactory, TimeSpan startupTimeout, string? installRoot = null)
     {
         _settings = settings;
         _logService = logService;
+        _processFactory = processFactory;
+        _startupTimeout = startupTimeout;
+        _installRoot = installRoot ?? AppContext.BaseDirectory;
         _httpClient = new HttpClient
         {
             Timeout = TimeSpan.FromMinutes(2)
@@ -51,97 +66,79 @@ public sealed class Pix2TextService : IDisposable
 
     public async Task<bool> InstallAsync(CancellationToken cancellationToken = default)
     {
-        await _installLock.WaitAsync(cancellationToken);
+        await _startLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        using var operation = BeginOperation(cancellationToken);
         try
         {
+            cancellationToken = operation.Token;
             LogInstallation("正在检测 Pix2Text 是否已安装...");
             var existingExecutable = ResolveExecutablePath();
             if (existingExecutable is not null &&
-                await HasServeDependenciesAsync(existingExecutable, cancellationToken))
+                await HasServeDependenciesAsync(existingExecutable, cancellationToken).ConfigureAwait(false))
             {
-                await SaveExecutablePathAsync(existingExecutable);
+                await SaveExecutablePathAsync(existingExecutable).ConfigureAwait(false);
                 ErrorMessage = null;
                 LogInstallation("已安装Pix2Text");
                 return true;
             }
 
-            if (existingExecutable is not null)
-                LogInstallation("检测到基础包，正在补充 HTTP 服务依赖...");
-
+            // 安装与启动共用锁，升级文件前仅停止本软件拥有的服务进程。
+            StopManagedProcess();
             var installRoot = GetInstallRoot();
-            var runtimeDirectory = Path.Combine(installRoot, "Pix2TextRuntime");
-            var pythonDirectory = Path.Combine(installRoot, ".pix2text-python");
-            var cacheDirectory = Path.Combine(installRoot, ".uv-cache");
-            var pythonExecutable = Path.Combine(runtimeDirectory, "Scripts", "python.exe");
-            var pix2TextExecutable = Path.Combine(runtimeDirectory, "Scripts", "p2t.exe");
             Directory.CreateDirectory(installRoot);
-
-            var environment = new Dictionary<string, string>
+            var scriptPath = Path.Combine(Path.GetTempPath(), $"Siua-Pix2Text-{Guid.NewGuid():N}.ps1");
+            try
             {
-                ["UV_CACHE_DIR"] = cacheDirectory,
-                ["UV_PYTHON_INSTALL_DIR"] = pythonDirectory
-            };
+                await using (var source = typeof(Pix2TextService).Assembly.GetManifestResourceStream("Siua.InstallPix2Text.ps1")
+                    ?? throw new FileNotFoundException("内置 Pix2Text 安装脚本缺失。"))
+                await using (var target = File.Create(scriptPath))
+                    await source.CopyToAsync(target, cancellationToken).ConfigureAwait(false);
 
-            if (!File.Exists(pythonExecutable))
-            {
-                var pythonRequest = "python.exe";
-                if (await HasSystemPythonAsync(cancellationToken))
+                LogInstallation("自动准备 uv、Python 3.11 和 Pix2Text；优先使用国内镜像...");
+                var info = new ProcessStartInfo
                 {
-                    LogInstallation("检测到现有 Python，直接使用");
-                }
-                else
+                    FileName = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System),
+                        "WindowsPowerShell", "v1.0", "powershell.exe"),
+                    WorkingDirectory = installRoot,
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    StandardOutputEncoding = Encoding.UTF8,
+                    StandardErrorEncoding = Encoding.UTF8
+                };
+                foreach (var argument in new[] { "-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
+                    scriptPath, "-InstallDirectory", installRoot, "-NoPause" })
+                    info.ArgumentList.Add(argument);
+                using var process = _processFactory(info);
+                process.Start();
+                var output = RelayInstallerOutputAsync(process.StandardOutput);
+                var error = RelayInstallerOutputAsync(process.StandardError);
+                try { await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false); }
+                catch
                 {
-                    pythonRequest = "3.11";
-                    LogInstallation("未找到 Python，准备 Python 3.11...");
-                    if (await RunUvAsync(
-                            installRoot,
-                            environment,
-                            ["python", "install", "3.11"],
-                            cancellationToken) != 0)
-                    {
-                        return InstallationFailed("Python 3.11 安装失败");
-                    }
+                    if (!process.HasExited) process.Kill(entireProcessTree: true);
+                    await process.WaitForExitAsync().ConfigureAwait(false);
+                    throw;
                 }
+                finally { await Task.WhenAll(output, error).ConfigureAwait(false); }
+                if (process.ExitCode != 0)
+                    return InstallationFailed($"安装脚本退出码 {process.ExitCode}；详细输出见 Log 文件夹的 Pix2Text-install 日志。");
 
-                LogInstallation("创建独立运行环境...");
-                if (await RunUvAsync(
-                        installRoot,
-                        environment,
-                        ["venv", runtimeDirectory, "--python", pythonRequest],
-                        cancellationToken) != 0)
-                {
-                    return InstallationFailed("Pix2Text 运行环境创建失败");
-                }
+                var executable = Path.Combine(installRoot, "Pix2TextRuntime", "Scripts", "p2t.exe");
+                if (!File.Exists(executable) || !await HasServeDependenciesAsync(executable, cancellationToken).ConfigureAwait(false))
+                    return InstallationFailed("安装后服务依赖验证失败，请检查日志");
+                await SaveExecutablePathAsync(executable).ConfigureAwait(false);
+                ErrorMessage = null;
+                LogInstallation("安装完成，可以直接启动 Pix2Text，无需重启电脑");
+                return true;
             }
-
-            LogInstallation("安装或更新 Pix2Text，下载依赖可能需要一些时间...");
-            if (await RunUvAsync(
-                    installRoot,
-                    environment,
-                    ["pip", "install", "--python", pythonExecutable, "--upgrade", "pix2text[serve]"],
-                    cancellationToken) != 0)
-            {
-                return InstallationFailed("Pix2Text 安装失败");
-            }
-
-            if (!File.Exists(pix2TextExecutable))
-                return InstallationFailed("安装完成，但没有找到 p2t.exe");
-
-            await SaveExecutablePathAsync(pix2TextExecutable);
-            ErrorMessage = null;
-            LogInstallation("安装完成，可以点击“启动 Pix2Text”");
-            return true;
+            finally { if (File.Exists(scriptPath)) File.Delete(scriptPath); }
         }
         catch (OperationCanceledException)
         {
             ErrorMessage = "Pix2Text 安装已取消";
             LogInstallation("安装已取消");
-            return false;
-        }
-        catch (Win32Exception exception)
-        {
-            ErrorMessage = "未找到 uv，请先安装 uv 并确保 uv.exe 已加入 PATH";
-            LogInstallation($"{ErrorMessage}：{exception}", LogLevel.Error);
             return false;
         }
         catch (Exception exception)
@@ -152,116 +149,194 @@ public sealed class Pix2TextService : IDisposable
         }
         finally
         {
-            _installLock.Release();
+            EndOperation(operation);
+            _startLock.Release();
         }
     }
 
     public async Task<bool> EnsureReadyAsync(CancellationToken cancellationToken = default)
     {
-        if (!TryGetEndpoint(out var listenAddress, out var serviceUri, out var endpointError))
-        {
-            ErrorMessage = endpointError;
-            LogError(endpointError);
-            return false;
-        }
-
-        if (IsReady || await IsServiceReadyAsync(serviceUri, cancellationToken))
-        {
-            IsReady = true;
-            return true;
-        }
-
-        await _startLock.WaitAsync(cancellationToken);
+        await _startLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        using var operation = BeginOperation(cancellationToken);
+        Pix2TextProcess? session = null;
         try
         {
-            if (!TryGetEndpoint(out listenAddress, out serviceUri, out endpointError))
+            cancellationToken = operation.Token;
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!TryGetEndpoint(out var listenAddress, out var serviceUri, out var endpointError))
             {
                 ErrorMessage = endpointError;
                 LogError(endpointError);
                 return false;
             }
 
-            if (IsReady || await IsServiceReadyAsync(serviceUri, cancellationToken))
+            // 每次核实接口，不让上一次的 IsReady 掩盖已退出的进程或失效端口。
+            if (await IsServiceReadyAsync(serviceUri, cancellationToken).ConfigureAwait(false))
             {
+                _process?.MarkReady();
                 IsReady = true;
+                ErrorMessage = null;
                 return true;
             }
-
-            var executable = ResolveExecutablePath();
-            if (executable is null)
+            IsReady = false;
+            session = _process;
+            if (session is { HasExited: true })
             {
-                ErrorMessage = "未找到 Pix2Text Runtime，请先点击“安装 Pix2Text”。";
-                LogError(ErrorMessage);
-                return false;
+                StopManagedProcess();
+                session = null;
             }
-
-            var pythonExecutable = Path.Combine(
-                Path.GetDirectoryName(executable)!,
-                "python.exe");
-            if (!File.Exists(pythonExecutable))
+            if (session is null)
             {
-                ErrorMessage = "Pix2Text Runtime 中没有找到 python.exe，请重新安装。";
-                LogError(ErrorMessage);
-                return false;
-            }
-
-            LogInfo($"正在启动 Pix2Text（{serviceUri.Authority}），首次加载模型可能需要较长时间...");
-            var process = new Process
-            {
-                StartInfo = new ProcessStartInfo
+                // 未确认是 Pix2Text 的监听者不强行关闭，也不再启动一个竞争同一端口的进程。
+                if (GetListeningProcessIds(_settings.Pix2TextPort).Count != 0)
                 {
-                    FileName = pythonExecutable,
-                    WorkingDirectory = Path.GetDirectoryName(executable)!,
-                    UseShellExecute = false,
-                    CreateNoWindow = true,
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true
-                },
-                EnableRaisingEvents = true
-            };
-            AddProcessArguments(process.StartInfo, listenAddress, _settings.Pix2TextPort);
-            // 服务可能在 stdout/stderr 输出完整识别内容。仅排空管道，
-            // 由下方的就绪检查和识别请求报告状态、退出码及 HTTP 错误。
-            process.OutputDataReceived += (_, _) => { };
-            process.ErrorDataReceived += (_, _) => { };
-            _process = process;
-            process.Start();
-            process.BeginOutputReadLine();
-            process.BeginErrorReadLine();
+                    ErrorMessage = $"端口 {_settings.Pix2TextPort} 已被占用，且未检测到可用 Pix2Text 服务";
+                    LogError(ErrorMessage);
+                    return false;
+                }
+                var executable = ResolveExecutablePath();
+                if (executable is null)
+                {
+                    ErrorMessage = "未找到 Pix2Text Runtime，请先点击“安装 Pix2Text”。";
+                    LogError(ErrorMessage);
+                    return false;
+                }
+                var pythonExecutable = Path.Combine(Path.GetDirectoryName(executable)!, "python.exe");
+                if (!File.Exists(pythonExecutable))
+                {
+                    ErrorMessage = "Pix2Text Runtime 中没有找到 python.exe，请重新安装。";
+                    LogError(ErrorMessage);
+                    return false;
+                }
+                var info = CreatePythonStartInfo(pythonExecutable);
+                AddProcessArguments(info, listenAddress, _settings.Pix2TextPort);
+                session = new Pix2TextProcess(_processFactory(info), pythonExecutable);
+                _process = session;
+                var owned = session;
+                session.Start(() =>
+                {
+                    if (!ReferenceEquals(_process, owned)) return;
+                    IsReady = false;
+                    if (owned.WasReady)
+                    {
+                        ErrorMessage = $"Pix2Text 服务进程已退出，退出码 {owned.ExitCode}";
+                        LogError(ErrorMessage);
+                    }
+                });
+                cancellationToken.ThrowIfCancellationRequested();
+                LogInfo($"正在启动 Pix2Text（{serviceUri.Authority}），首次加载模型可能需要较长时间...");
+            }
+            else
+            {
+                LogInfo("Pix2Text 进程仍在运行，继续等待服务就绪，不重复启动...");
+            }
 
-            for (var i = 0; i < 240; i++)
+            var timer = Stopwatch.StartNew();
+            while (timer.Elapsed < _startupTimeout)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                if (process.HasExited)
-                    break;
-
-                if (await IsServiceReadyAsync(serviceUri, cancellationToken))
+                if (session.HasExited)
                 {
+                    ErrorMessage = $"Pix2Text 启动失败，进程退出码 {session.ExitCode}";
+                    LogError($"{ErrorMessage}：{Environment.NewLine}{await session.GetStartupDetailsAsync().ConfigureAwait(false)}");
+                    StopManagedProcess();
+                    return false;
+                }
+                if (await IsServiceReadyAsync(serviceUri, cancellationToken).ConfigureAwait(false) && !session.HasExited)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    session.MarkReady();
                     IsReady = true;
+                    if (session.HasExited) { IsReady = false; continue; }
                     ErrorMessage = null;
                     LogInfo("Pix2Text 已就绪，支持普通文字和数学公式识别");
                     return true;
                 }
-
-                await Task.Delay(500, cancellationToken);
+                await Task.Delay(500, cancellationToken).ConfigureAwait(false);
             }
 
-            ErrorMessage = process.HasExited
-                ? $"Pix2Text 启动失败，进程退出码：{process.ExitCode}"
-                : "Pix2Text 模型加载超时";
-            LogError(ErrorMessage);
+            if (session.HasExited)
+            {
+                ErrorMessage = $"Pix2Text 启动失败，进程退出码 {session.ExitCode}";
+                LogError($"{ErrorMessage}：{Environment.NewLine}{await session.GetStartupDetailsAsync().ConfigureAwait(false)}");
+                StopManagedProcess();
+                return false;
+            }
+            // 保留仍在加载的进程，下次启动继续等待同一进程。
+            ErrorMessage = "Pix2Text 模型加载超时，进程仍保留；可再次点击启动继续等待";
+            LogError($"{ErrorMessage}：{Environment.NewLine}{await session.GetStartupDetailsAsync().ConfigureAwait(false)}");
             return false;
         }
-        catch (Exception ex)
+        catch (OperationCanceledException)
         {
-            ErrorMessage = ex.Message;
-            LogError($"Pix2Text 启动失败：{ex}");
+            StopManagedProcess();
+            IsReady = false;
+            throw;
+        }
+        catch (Exception exception)
+        {
+            IsReady = false;
+            var details = session is null ? "" : await session.GetStartupDetailsAsync().ConfigureAwait(false);
+            ErrorMessage = exception.Message;
+            LogError($"Pix2Text 启动失败：{exception}{Environment.NewLine}{details}");
+            StopManagedProcess();
             return false;
         }
         finally
         {
+            EndOperation(operation);
             _startLock.Release();
         }
+    }
+
+    internal static ProcessStartInfo CreatePythonStartInfo(string executable)
+    {
+        var directory = Path.GetDirectoryName(executable)!;
+        var info = new ProcessStartInfo
+        {
+            FileName = executable,
+            WorkingDirectory = directory,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            StandardOutputEncoding = Encoding.UTF8,
+            StandardErrorEncoding = Encoding.UTF8
+        };
+        // 显式使用虚拟环境及其 DLL 搜索路径，不依赖安装前 Siua 继承的旧 PATH。
+        info.Environment["PATH"] = directory + Path.PathSeparator +
+            Path.GetDirectoryName(directory) + Path.PathSeparator +
+            Environment.GetEnvironmentVariable("PATH");
+        info.Environment.Remove("PYTHONHOME");
+        info.Environment.Remove("PYTHONPATH");
+        info.Environment["PYTHONNOUSERSITE"] = "1";
+        info.Environment["PYTHONUTF8"] = "1";
+        info.Environment["PYTHONUNBUFFERED"] = "1";
+        return info;
+    }
+
+    private CancellationTokenSource BeginOperation(CancellationToken token)
+    {
+        lock (_operationSync)
+        {
+            var operation = CancellationTokenSource.CreateLinkedTokenSource(token);
+            if (_disposed) operation.Cancel();
+            _activeOperation = operation;
+            return operation;
+        }
+    }
+
+    private void EndOperation(CancellationTokenSource operation)
+    {
+        lock (_operationSync)
+        {
+            if (ReferenceEquals(_activeOperation, operation)) _activeOperation = null;
+        }
+    }
+
+    private void CancelOperation()
+    {
+        lock (_operationSync) { _activeOperation?.Cancel(); }
     }
 
     public async Task<string?> RecognizeAsync(
@@ -329,79 +404,30 @@ public sealed class Pix2TextService : IDisposable
 
     public async Task<bool> StopAsync(CancellationToken cancellationToken = default)
     {
-        var stopped = StopManagedProcess();
-        var fullyStopped = true;
-        if (TryGetEndpoint(out _, out var serviceUri, out _))
+        CancelOperation();
+        await _startLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
         {
-            if (stopped || await IsServiceReadyAsync(serviceUri, cancellationToken))
-                stopped |= StopListeningProcesses(_settings.Pix2TextPort);
-
-            fullyStopped = await WaitUntilStoppedAsync(
-                serviceUri,
-                _settings.Pix2TextPort,
-                cancellationToken);
+            var stopped = StopManagedProcess();
+            IsReady = false;
+            ErrorMessage = null;
+            if (TryGetEndpoint(out _, out var serviceUri, out _) &&
+                await IsServiceReadyAsync(serviceUri, cancellationToken).ConfigureAwait(false))
+            {
+                ErrorMessage = "该端口的 Pix2Text 服务不属于当前软件进程，请在启动它的程序中停止";
+                LogError(ErrorMessage);
+                return false;
+            }
+            LogInfo(stopped ? "Pix2Text 服务已停止" : "当前软件没有运行中的 Pix2Text 服务进程");
+            return true;
         }
-
-        IsReady = false;
-        ErrorMessage = null;
-        var message = stopped && fullyStopped
-            ? "Pix2Text 服务已完全停止，监听端口已释放"
-            : fullyStopped
-                ? "Pix2Text 服务当前未运行"
-                : "Pix2Text 服务停止失败，监听端口仍被占用";
-        if (fullyStopped)
-            LogInfo(message);
-        else
-            LogError(message);
-        return fullyStopped;
-    }
-
-    private async Task<bool> WaitUntilStoppedAsync(
-        Uri serviceUri,
-        int port,
-        CancellationToken cancellationToken)
-    {
-        for (var attempt = 0; attempt < 30; attempt++)
+        catch (OperationCanceledException) { throw; }
+        catch (Exception exception)
         {
-            if (!await IsServiceReadyAsync(serviceUri, cancellationToken) &&
-                GetListeningProcessIds(port).Count == 0)
-                return true;
-
-            await Task.Delay(100, cancellationToken);
+            LogError($"Pix2Text 停止失败：{exception}");
+            return false;
         }
-
-        return false;
-    }
-
-    private bool StopListeningProcesses(int port)
-    {
-        var stopped = false;
-        foreach (var processId in GetListeningProcessIds(port))
-        {
-            if (processId == Environment.ProcessId)
-                continue;
-
-            try
-            {
-                using var process = Process.GetProcessById(processId);
-                if (process.HasExited)
-                    continue;
-
-                process.Kill(entireProcessTree: true);
-                process.WaitForExit(5_000);
-                stopped |= process.HasExited;
-            }
-            catch (ArgumentException)
-            {
-                stopped = true;
-            }
-            catch (Exception exception)
-            {
-                LogError($"Pix2Text 监听进程 {processId} 停止失败：{exception}");
-            }
-        }
-
-        return stopped;
+        finally { _startLock.Release(); }
     }
 
     private static IReadOnlySet<int> GetListeningProcessIds(int port)
@@ -557,7 +583,7 @@ public sealed class Pix2TextService : IDisposable
         return candidates.FirstOrDefault(File.Exists);
     }
 
-    private static string GetInstallRoot() => AppContext.BaseDirectory;
+    private string GetInstallRoot() => _installRoot;
 
     private async Task SaveExecutablePathAsync(string executablePath)
     {
@@ -572,119 +598,33 @@ public sealed class Pix2TextService : IDisposable
         return false;
     }
 
-    private async Task<int> RunUvAsync(
-        string workingDirectory,
-        IReadOnlyDictionary<string, string> environment,
-        IReadOnlyList<string> arguments,
-        CancellationToken cancellationToken)
+    private async Task<bool> HasServeDependenciesAsync(string pix2TextExecutable, CancellationToken cancellationToken)
     {
-        using var process = new Process
-        {
-            StartInfo = new ProcessStartInfo
-            {
-                FileName = "uv.exe",
-                WorkingDirectory = workingDirectory,
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true
-            }
-        };
-
-        foreach (var argument in arguments)
-            process.StartInfo.ArgumentList.Add(argument);
-        foreach (var variable in environment)
-            process.StartInfo.Environment[variable.Key] = variable.Value;
-
-        process.Start();
-        var outputTask = RelayInstallerOutputAsync(process.StandardOutput);
-        var errorTask = RelayInstallerOutputAsync(process.StandardError);
+        var python = Path.Combine(Path.GetDirectoryName(pix2TextExecutable)!, "python.exe");
+        if (!File.Exists(python)) return false;
+        var info = CreatePythonStartInfo(python);
+        info.ArgumentList.Add("-I");
+        info.ArgumentList.Add("-X");
+        info.ArgumentList.Add("utf8");
+        info.ArgumentList.Add("-c");
+        info.ArgumentList.Add("import fastapi, uvicorn, multipart, pix2text.serve");
+        using var session = new Pix2TextProcess(_processFactory(info), python);
         try
         {
-            await process.WaitForExitAsync(cancellationToken);
-        }
-        catch (OperationCanceledException)
-        {
-            if (!process.HasExited)
-                process.Kill(entireProcessTree: true);
-            throw;
-        }
-
-        await Task.WhenAll(outputTask, errorTask);
-        return process.ExitCode;
-    }
-
-    private static async Task<bool> HasSystemPythonAsync(
-        CancellationToken cancellationToken)
-    {
-        try
-        {
-            using var process = new Process
-            {
-                StartInfo = new ProcessStartInfo
-                {
-                    FileName = "python.exe",
-                    Arguments = "--version",
-                    UseShellExecute = false,
-                    CreateNoWindow = true,
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true
-                }
-            };
-            process.Start();
-            var standardOutput = process.StandardOutput.ReadToEndAsync(cancellationToken);
-            var standardError = process.StandardError.ReadToEndAsync(cancellationToken);
-            await process.WaitForExitAsync(cancellationToken);
-            var versionText = $"{await standardOutput} {await standardError}";
-            foreach (var token in versionText.Split(
-                         [' ', '\r', '\n'],
-                StringSplitOptions.RemoveEmptyEntries))
-            {
-                if (Version.TryParse(token, out var version))
-                    return version.Major == 3;
-            }
-        }
-        catch
-        {
-        }
-
-        return false;
-    }
-
-    private static async Task<bool> HasServeDependenciesAsync(
-        string pix2TextExecutable,
-        CancellationToken cancellationToken)
-    {
-        var pythonExecutable = Path.Combine(
-            Path.GetDirectoryName(pix2TextExecutable)!,
-            "python.exe");
-        if (!File.Exists(pythonExecutable))
+            session.Start(() => { });
+            var timer = Stopwatch.StartNew();
+            while (!session.HasExited && timer.Elapsed < TimeSpan.FromSeconds(60))
+                await Task.Delay(100, cancellationToken).ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
+            if (session.HasExited && session.ExitCode == 0) return true;
+            LogInstallation($"服务依赖检查失败（退出码 {session.ExitCode?.ToString() ?? "未退出"}）：{Environment.NewLine}" +
+                await session.GetStartupDetailsAsync().ConfigureAwait(false), LogLevel.Error);
             return false;
-
-        try
-        {
-            using var process = new Process
-            {
-                StartInfo = new ProcessStartInfo
-                {
-                    FileName = pythonExecutable,
-                    UseShellExecute = false,
-                    CreateNoWindow = true,
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true
-                }
-            };
-            process.StartInfo.ArgumentList.Add("-c");
-            process.StartInfo.ArgumentList.Add("import fastapi, uvicorn, multipart, pix2text.serve");
-            process.Start();
-            var standardOutput = process.StandardOutput.ReadToEndAsync(cancellationToken);
-            var standardError = process.StandardError.ReadToEndAsync(cancellationToken);
-            await process.WaitForExitAsync(cancellationToken);
-            await Task.WhenAll(standardOutput, standardError);
-            return process.ExitCode == 0;
         }
-        catch
+        catch (OperationCanceledException) { throw; }
+        catch (Exception exception)
         {
+            LogInstallation($"服务依赖检查失败：{exception}", LogLevel.Error);
             return false;
         }
     }
@@ -694,7 +634,7 @@ public sealed class Pix2TextService : IDisposable
         while (await reader.ReadLineAsync() is { } line)
         {
             if (!string.IsNullOrWhiteSpace(line))
-                LogInstallation(line.Trim());
+                LogInstallation(Regex.Replace(line.Trim(), @"^(?:\[[^\]]+\]\s*)?\[Pix2Text安装\]\s*", ""));
         }
     }
 
@@ -712,6 +652,7 @@ public sealed class Pix2TextService : IDisposable
             var content = await response.Content.ReadAsStringAsync(timeout.Token);
             return content.Contains("/pix2text", StringComparison.Ordinal);
         }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
         catch
         {
             return false;
@@ -783,46 +724,40 @@ public sealed class Pix2TextService : IDisposable
     {
         string[] arguments =
         [
-            "-c", ServerBootstrap, listenAddress.ToString(), port.ToString()
+            "-I", "-X", "utf8", "-u", "-c", ServerBootstrap, listenAddress.ToString(), port.ToString()
         ];
         foreach (var argument in arguments)
             startInfo.ArgumentList.Add(argument);
     }
 
-    private void OnSettingsPropertyChanged(object? sender, PropertyChangedEventArgs eventArgs)
+    private async void OnSettingsPropertyChanged(object? sender, PropertyChangedEventArgs eventArgs)
     {
-        if (eventArgs.PropertyName is not (nameof(GlobalSettings.Pix2TextHost) or
-            nameof(GlobalSettings.Pix2TextPort)))
+        if (eventArgs.PropertyName is not (nameof(GlobalSettings.Pix2TextHost) or nameof(GlobalSettings.Pix2TextPort)))
             return;
-
         IsReady = false;
-        ErrorMessage = null;
-        StopManagedProcess();
+        CancelOperation();
+        await _startLock.WaitAsync().ConfigureAwait(false);
+        try { StopManagedProcess(); }
+        catch (Exception exception) { LogError($"Pix2Text 配置变更后停止服务失败：{exception}"); }
+        finally { _startLock.Release(); }
     }
 
     private bool StopManagedProcess()
     {
-        var process = Interlocked.Exchange(ref _process, null);
-        if (process is null)
-            return false;
-
+        var session = Interlocked.Exchange(ref _process, null);
+        IsReady = false;
+        if (session is null) return false;
         try
         {
-            var wasRunning = !process.HasExited;
-            if (wasRunning)
-            {
-                process.Kill(entireProcessTree: true);
-                process.WaitForExit(5_000);
-            }
-            return wasRunning;
+            var stopped = session.Stop();
+            session.Dispose();
+            return stopped;
         }
         catch
         {
-            return false;
-        }
-        finally
-        {
-            process.Dispose();
+            // 停止失败时保留归属，下一次停止仍可处理；绝不去杀占用同一端口的其他进程。
+            Interlocked.CompareExchange(ref _process, session, null);
+            throw;
         }
     }
 
@@ -837,10 +772,17 @@ public sealed class Pix2TextService : IDisposable
 
     public void Dispose()
     {
+        lock (_operationSync)
+        {
+            if (_disposed) return;
+            _disposed = true;
+            _activeOperation?.Cancel();
+        }
         _settings.PropertyChanged -= OnSettingsPropertyChanged;
-        StopManagedProcess();
+        try { StopManagedProcess(); }
+        catch (Exception exception) { LogError($"Pix2Text 关闭时清理进程失败：{exception}"); }
         _httpClient.Dispose();
-        _installLock.Dispose();
-        _startLock.Dispose();
+
+        // 操作取消后仍需释放此锁，因此不在 Dispose 中提前销毁它。
     }
 }

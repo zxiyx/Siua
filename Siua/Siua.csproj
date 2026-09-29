@@ -71,5 +71,6 @@
 
     <ItemGroup>
       <Folder Include="Core\zhs\" />
+      <EmbeddedResource Include="Scripts\InstallPix2Text.ps1" LogicalName="Siua.InstallPix2Text.ps1" />
     </ItemGroup>
 </Project>

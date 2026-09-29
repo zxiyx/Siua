@@ -33,26 +33,34 @@ public sealed class XxtVideo
         return await _container.Locator(IncompleteIconSelector).CountAsync() == 0;
     }
 
-    public async Task InitializeAsync()
+    public async Task InitializeAsync(CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         var iframeLocator = _container.Locator("iframe").First;
-        await iframeLocator.WaitForAsync();
+        await iframeLocator.WaitForAsync().WaitAsync(cancellationToken);
         var iframeElement = await iframeLocator.ElementHandleAsync()
             ?? throw new PlaywrightException("无法获取视频 iframe 元素。");
-        var frame = await iframeElement.ContentFrameAsync()
-            ?? throw new PlaywrightException("无法进入视频 iframe。");
+        IFrame frame;
+        try
+        {
+            frame = await iframeElement.ContentFrameAsync()
+                ?? throw new PlaywrightException("无法进入视频 iframe。");
+        }
+        finally { await iframeElement.DisposeAsync(); }
+        cancellationToken.ThrowIfCancellationRequested();
         _player = frame.Locator("#video").First;
         _videoElement = frame.Locator("#reader video.vjs-tech").First;
         _bigPlayButton = frame.Locator(".vjs-big-play-button").First;
 
-        await _player.WaitForAsync();
-        await _videoElement.WaitForAsync();
+        await _player.WaitForAsync().WaitAsync(cancellationToken);
+        await _videoElement.WaitForAsync().WaitAsync(cancellationToken);
     }
 
     public async Task PlayAsync(CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
         var playerClass = await GetPlayerClassAsync();
+        cancellationToken.ThrowIfCancellationRequested();
         if (HasClass(playerClass, EndedClass))
             return;
 
@@ -73,12 +81,14 @@ public sealed class XxtVideo
 
     public async Task<bool> TryFinishAsync(CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         var video = GetVideoElement();
         var duration = await WaitForDurationAsync(video, cancellationToken);
         if (duration is null)
         {
             return false;
         }
+        cancellationToken.ThrowIfCancellationRequested();
         await video.EvaluateAsync("(element, time) => element.currentTime = time", duration.Value * 0.999);
         await ApplyPlaybackSettingsAsync();
         await ResumeAsync(cancellationToken);
@@ -97,6 +107,7 @@ public sealed class XxtVideo
         {
             cancellationToken.ThrowIfCancellationRequested();
             var playerClass = await GetPlayerClassAsync();
+            cancellationToken.ThrowIfCancellationRequested();
             if (HasClass(playerClass, EndedClass))
             {
                 return true;
