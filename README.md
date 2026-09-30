@@ -95,6 +95,7 @@ Siua 是一款面向 Windows 的桌面端课程学习辅助工具，将课程管
 - 建议安装 Microsoft Edge，也可选择已安装的 Chromium 内核浏览器作为系统默认浏览器。
 - 使用 AI 答题时，需要可用的模型接口、API Key，以及 Pix2Text 本地服务。
 - 无需预先手动安装 uv 或 Python，软件内的 Pix2Text 安装按钮会按需准备环境。
+- Pix2Text依赖MSVC++环境，如安装过程提示 msvc++14.0 or greater is required则需自行下载Microsoft C++ Build Tool
 - 安装包中的程序、DLL、配置文件和 `.playwright` 目录应保持完整，不要只移动 `Siua.exe`。
 
 ### 首次使用
