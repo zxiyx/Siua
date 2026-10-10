@@ -165,18 +165,18 @@ public sealed class XxtRunner
             try
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                if (_settings.JumpCompleted && document.IsCompleted)
+                if (_settings.JumpCompleted && await document.IsCompletedAsync())
                     continue;
 
                 LogInfo("完成文档中...");
                 await document.ScrollToEndAsync(cancellationToken);
-                LogInfo("完成文档");
+                LogInfo(document.IsCompleted ? "完成文档" : "文档已浏览（无任务点标记）");
             }
             catch (OperationCanceledException)
             {
                 throw;
             }
-            catch (PlaywrightException exception) when (!_page.IsClosed)
+            catch (Exception exception) when (exception is PlaywrightException or TimeoutException && !_page.IsClosed)
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 LogError($"文档处理失败，已跳过当前任务点：{exception}");
@@ -224,6 +224,28 @@ public sealed class XxtRunner
                 }
 
                 cancellationToken.ThrowIfCancellationRequested();
+                if (_settings.RandomTest)
+                {
+                    await chapterTest.VerifyQuestionListAsync(cancellationToken);
+                    for (var index = 0; index < chapterTest.Questions.Count; index++)
+                    {
+                        if (!await FillRandomQuestionAsync(chapterTest.Questions[index], index + 1,
+                                cancellationToken, prepare: false))
+                            return false;
+                    }
+                    // 修补后再只读核对一遍，避免后一道题的回调清空前一道题。
+                    await chapterTest.VerifyQuestionListAsync(cancellationToken);
+                    for (var index = 0; index < chapterTest.Questions.Count; index++)
+                    {
+                        try { await chapterTest.Questions[index].VerifyRandomAnswerAsync(cancellationToken); }
+                        catch (Exception exception) when (exception is PlaywrightException or TimeoutException)
+                        {
+                            cancellationToken.ThrowIfCancellationRequested();
+                            LogError($"第 {index + 1} 题随机答案最终复核失败，已停止提交：{exception}");
+                            return false;
+                        }
+                    }
+                }
                 LogInfo("正在提交章节测试...");
                 await chapterTest.SubmitAnswerAsync(cancellationToken);
                 await resolver.ConfirmTestSubmissionAsync(cancellationToken);
@@ -253,26 +275,9 @@ public sealed class XxtRunner
         int questionIndex,
         CancellationToken cancellationToken)
     {
-        await question.LoadAnswersAsync(cancellationToken);
         if (_settings.RandomTest)
-        {
-            if (question.IsTextAnswer)
-            {
-                await question.FillTextAnswerAsync(RandomAnswerSelector.FillBlanks(1)[0], cancellationToken);
-                LogInfo("已随机填写其它题文本答案（汉字或数字）");
-                return true;
-            }
-            if (question.IsFillInBlank)
-            {
-                if (question.BlankCount == 0)
-                    return DisableRandomTest("未识别到填空题答题框，已关闭随机答题");
-                await question.FillBlanksAsync(RandomAnswerSelector.FillBlanks(question.BlankCount), cancellationToken);
-                LogInfo($"已随机填写 {question.BlankCount} 个空（汉字或数字）");
-                return true;
-            }
-
-            return await SelectRandomAnswersAsync(question, cancellationToken);
-        }
+            return await FillRandomQuestionAsync(question, questionIndex, cancellationToken, prepare: true);
+        await question.LoadAnswersAsync(cancellationToken);
 
         if (question.IsFillInBlank && question.BlankCount == 0)
             return DisableAutoTest("已识别为填空题，但未找到可填写的答题框，已关闭自动答题");
@@ -392,25 +397,23 @@ public sealed class XxtRunner
         return true;
     }
 
-    private async Task<bool> SelectRandomAnswersAsync(
-        XxtQuestion question,
-        CancellationToken cancellationToken)
+    private async Task<bool> FillRandomQuestionAsync(
+        XxtQuestion question, int questionIndex,
+        CancellationToken cancellationToken, bool prepare)
     {
-        var answers = question.Answers.ToArray();
-        var selectedIndexes = RandomAnswerSelector.Select(
-            answers.Length,
-            question.AllowsMultipleAnswers);
-        if (selectedIndexes.Count == 0)
-            return DisableRandomTest("未识别到题目选项，已关闭随机答题");
-
-        foreach (var index in selectedIndexes)
+        try
+        {
+            if (prepare) await question.PrepareRandomAnswerAsync(cancellationToken);
+            await question.EnsureRandomAnswerAsync(cancellationToken);
+            if (prepare) LogInfo($"第 {questionIndex} 题随机答案已填写并验证");
+            return true;
+        }
+        catch (Exception exception) when (exception is PlaywrightException or TimeoutException && !_page.IsClosed)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            await answers[index].Target.ClickAsync();
+            LogError($"第 {questionIndex} 题随机答题{(prepare ? "填写" : "提交前复核")}失败，已停止提交：{exception}");
+            return false;
         }
-
-        LogInfo($"已随机选择 {selectedIndexes.Count} 个答案");
-        return true;
     }
 
     private bool DisableAutoTest(string message)

@@ -14,6 +14,7 @@ public sealed class XxtChapterTest
     private readonly List<XxtQuestion> _questions = [];
     private ILocator? _testPanel;
     private IFrame? _testFrame;
+    private string[] _questionKeys = [];
 
     public XxtChapterTest(ILocator container)
     {
@@ -80,12 +81,31 @@ public sealed class XxtChapterTest
         var questionsContainer = _testPanel.Locator("form #ZyBottom");
         await questionsContainer.Locator("div.TiMu.newTiMu").First.WaitForAsync();
         var questionLocators = questionsContainer.Locator("div.TiMu.newTiMu");
+        _questionKeys = await ReadQuestionKeysAsync(questionLocators);
         var count = await questionLocators.CountAsync();
         for (var index = 0; index < count; index++)
         {
             cancellationToken.ThrowIfCancellationRequested();
             _questions.Add(new XxtQuestion(questionLocators.Nth(index)));
         }
+    }
+
+    private static Task<string[]> ReadQuestionKeysAsync(ILocator questions) => questions.EvaluateAllAsync<string[]>("""
+        nodes => nodes.map(node => JSON.stringify([
+            node.id, node.getAttribute('data'),
+            node.querySelector('.Zy_TItle')?.textContent,
+            [...node.querySelectorAll('input[type=hidden][name^=type], input[type=hidden][name^=questionId]')]
+                .map(input => [input.name, input.value])
+        ]))
+        """);
+
+    public async Task VerifyQuestionListAsync(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (_testPanel is null) throw new PlaywrightException("章节测试尚未加载。");
+        var keys = await ReadQuestionKeysAsync(_testPanel.Locator("form #ZyBottom div.TiMu.newTiMu"));
+        if (!System.Linq.Enumerable.SequenceEqual(keys, _questionKeys))
+            throw new PlaywrightException("章节测试题目数量、顺序或内容发生变化，已停止提交以避免漏题。");
     }
 
     public async Task WaitForSubmissionAsync(
@@ -183,7 +203,7 @@ public sealed class XxtChapterTest
 }
 
 /// <summary>表示一道学习通题目及其选择项、填空或文本答题控件。</summary>
-public sealed class XxtQuestion
+public sealed partial class XxtQuestion
 {
     private readonly ILocator _container;
     private readonly List<XxtAnswerOption> _answers = [];
@@ -433,7 +453,8 @@ public sealed class XxtQuestion
         await FillInputsAsync([answer], cancellationToken);
     }
 
-    private async Task FillInputsAsync(IReadOnlyList<string> answers, CancellationToken cancellationToken)
+    private async Task FillInputsAsync(IReadOnlyList<string> answers, CancellationToken cancellationToken,
+        bool onlyMismatches = false)
     {
         cancellationToken.ThrowIfCancellationRequested();
         for (var index = 0; index < answers.Count; index++)
@@ -448,6 +469,8 @@ public sealed class XxtQuestion
         {
             cancellationToken.ThrowIfCancellationRequested();
             var blank = _blanks[index];
+            if (onlyMismatches && await BlankMatchesAsync(blank, answers[index]))
+                continue;
             await blank.Input.FillAsync(answers[index]);
             // fill 会触发 input，但部分页面在 change/blur 或 UEditor contentchange
             // 时才保存答案。富文本必须同步并检查真实表单值，不能只改 iframe DOM。
@@ -511,6 +534,7 @@ public sealed class XxtQuestion
             {
                 throw new PlaywrightException(error);
             }
+            if (onlyMismatches) await Task.Delay(250, cancellationToken);
         }
     }
 

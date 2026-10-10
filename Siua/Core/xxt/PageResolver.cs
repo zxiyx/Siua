@@ -87,6 +87,7 @@ public sealed class XxtPageResolver
         for (var index = 0; index < attachmentCount; index++)
         {
             var container = attachmentContainers.Nth(index);
+            var isKnownDocument = false;
             try
             {
                 var iframe = container.Locator("iframe").First;
@@ -106,13 +107,16 @@ public sealed class XxtPageResolver
                 }
 
                 var isDocumentModule = module is "ppt" or "pdf" or "doc" or "document";
+                isKnownDocument = isDocumentModule;
                 if (module.Length > 0 && !isDocumentModule)
                 {
                     _logService.AddLog(LogLevel.Info, "Xxt", "检测到未支持的附件模块，已略过");
                     continue;
                 }
 
-                var document = await new XxtDocumentResolver(container).ResolveAsync(isDocumentModule);
+                var documentResolver = new XxtDocumentResolver(container);
+                isKnownDocument |= await documentResolver.HasDocumentContainerAsync();
+                var document = await documentResolver.ResolveAsync(isKnownDocument);
                 if (document is not null)
                 {
                     _docs.Add(document);
@@ -129,11 +133,14 @@ public sealed class XxtPageResolver
             catch (Exception exception) when (exception is PlaywrightException or TimeoutException)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                HasResolutionErrors = true;
+                // 已确认的文档失败不能被当成潜在的章节测试；未知附件仍保留保护。
+                HasResolutionErrors |= !isKnownDocument;
                 _logService.AddLog(
                     LogLevel.Error,
                     "Xxt",
-                    $"任务点解析失败，当前页面仍有未确认任务：{exception}");
+                    isKnownDocument
+                        ? $"文档解析失败，已跳过当前文档：{exception}"
+                        : $"任务点解析失败，当前页面仍有未确认任务：{exception}");
             }
         }
     }

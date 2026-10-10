@@ -8,7 +8,6 @@ namespace Siua.Core.Xxt;
 public sealed class XxtDocumentResolver
 {
 
-    private const string IncompleteIconSelector = "div.ans-job-icon[aria-label='任务点未完成']";
     private readonly ILocator _container;
 
     public XxtDocumentResolver(ILocator container)
@@ -30,8 +29,13 @@ public sealed class XxtDocumentResolver
         }
 
         var documentFrame = await GetRequiredContentFrameAsync(outerFrame.Locator("#panView").Last);
-        var isCompleted = await _container.Locator(IncompleteIconSelector).CountAsync() == 0;
-        return new XxtDocument(documentFrame, isCompleted);
+        return new XxtDocument(documentFrame, false, _container);
+    }
+
+    public async Task<bool> HasDocumentContainerAsync()
+    {
+        var frame = await GetRequiredContentFrameAsync(_container.Locator("iframe").First);
+        return await frame.Locator("#docContainer").CountAsync() > 0;
     }
 
     private static async Task<IFrame> GetRequiredContentFrameAsync(ILocator locator)

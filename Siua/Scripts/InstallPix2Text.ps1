@@ -1,8 +1,10 @@
 ﻿#requires -Version 5.1
 <#
-Pix2Text 安装器。独立运行时先退出 Siua，再将本脚本放在 Siua.exe 所在目录运行。
-也可指定：powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\222.ps1 -InstallDirectory "D:\Siua"
-默认复用可用环境；-Upgrade 主动更新；-NoPause 适用于自动运行。
+Pix2Text 安装/修复器。独立运行时先退出 Siua；在桌面右键运行会提示输入 Siua.exe 所在目录。
+放在 Siua.exe 旁边运行时自动使用该目录。也可指定：
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\InstallPix2Text.ps1 -InstallDirectory "D:\Siua"
+默认复用可用环境；验证失败自动修复核心依赖。-Upgrade 更新其他依赖，但仍遵守核心兼容版本。
+-NoPause 适用于软件内调用，必须传入 -InstallDirectory 或将脚本放在 Siua.exe 旁边。
 默认自动配置当前用户 PATH；-NoUserPath 可跳过 PATH 写入。
 依赖镜像：https://mirrors.tuna.tsinghua.edu.cn/help/pypi/
 uv/Python 镜像：https://mirrors.ustc.edu.cn/help/github-release.html
@@ -10,7 +12,7 @@ uv/Python 镜像：https://mirrors.ustc.edu.cn/help/github-release.html
 #>
 [CmdletBinding()]
 param(
-    [string]$InstallDirectory = $PSScriptRoot,
+    [string]$InstallDirectory = '',
     [ValidateRange(30, 1800)][int]$HttpTimeout = 180,
     [ValidateRange(1, 5)][int]$RetryCount = 2,
     [switch]$Upgrade,
@@ -26,6 +28,32 @@ $script:LogPath = $null
 $savedEnvironment = @{}
 $originalTls = [Net.ServicePointManager]::SecurityProtocol
 $exitCode = 0
+# CnSTD 1.2.8 依赖 resolve_model_key；RapidOCR 3.10 的接口已变化。
+# 必须作为直接安装要求传给 uv，才能修复已安装但不兼容的 RapidOCR。
+# 这四项同时固定，避免只锁定 RapidOCR 却安装到新的 CnSTD/CnOCR。
+$coreRequirements = @('pix2text[serve]==1.1.7', 'cnstd==1.2.8', 'cnocr[ort-cpu]==2.3.3', 'rapidocr==3.9.2')
+$corePackages = @('pix2text', 'cnstd', 'cnocr', 'rapidocr')
+# 与本组 Pix2Text 实测使用的模型推理接口一致，避免首次安装/Upgrade 拉入新的大版本。
+$inferenceRequirements = @('transformers==4.57.6', 'optimum[onnxruntime]==2.1.0', 'optimum-onnx==0.1.0')
+
+function Resolve-InstallDirectory {
+    param([string]$RequestedDirectory, [string]$ScriptDirectory, [bool]$Unattended)
+    if (-not [string]::IsNullOrWhiteSpace($RequestedDirectory)) {
+        return [IO.Path]::GetFullPath([Environment]::ExpandEnvironmentVariables($RequestedDirectory.Trim().Trim('"')))
+    }
+    if (Test-Path -LiteralPath (Join-Path $ScriptDirectory 'Siua.exe') -PathType Leaf) {
+        return [IO.Path]::GetFullPath($ScriptDirectory)
+    }
+    if ($Unattended) { throw '自动运行时请通过 -InstallDirectory 指定软件目录。' }
+    Write-Host '请先退出 Siua，然后输入 Siua.exe 所在的文件夹（例如 D:\Program Files\Siua）。' -ForegroundColor Cyan
+    $selectedDirectory = Read-Host '安装/修复目录（留空取消）'
+    if ([string]::IsNullOrWhiteSpace($selectedDirectory)) { throw '已取消安装。' }
+    $resolvedDirectory = [IO.Path]::GetFullPath([Environment]::ExpandEnvironmentVariables($selectedDirectory.Trim().Trim('"')))
+    if (-not (Test-Path -LiteralPath (Join-Path $resolvedDirectory 'Siua.exe') -PathType Leaf)) {
+        throw "该目录中没有 Siua.exe，请确认软件安装位置后重试：$resolvedDirectory"
+    }
+    return $resolvedDirectory
+}
 
 function Write-Step {
     param([string]$Message)
@@ -118,15 +146,41 @@ function Get-PythonVersion {
 
 function Test-Pix2Text {
     param([string]$PythonExecutable, [string]$Pix2TextExecutable)
-    if (-not (Test-Path -LiteralPath $Pix2TextExecutable -PathType Leaf)) { return $false }
+    if (-not (Test-Path -LiteralPath $PythonExecutable -PathType Leaf)) { return $false }
     try {
+        # 元数据查询不导入包，即使导入崩溃，也能先在日志留下实际版本。
+        Invoke-NativeCommand $PythonExecutable @('-I', '-u', '-c', @'
+import sys
+from importlib.metadata import version, PackageNotFoundError
+print('Python: ' + sys.version.split()[0] + ' | ' + sys.executable)
+for name in ('pix2text', 'cnstd', 'cnocr', 'rapidocr', 'transformers', 'optimum', 'optimum-onnx'):
+    try:
+        print(name + ': ' + version(name))
+    except PackageNotFoundError:
+        print(name + ': not installed')
+'@)
+        if (-not (Test-Path -LiteralPath $Pix2TextExecutable -PathType Leaf)) {
+            Write-Step '未找到 p2t.exe，将安装或修复命令入口。'
+            return $false
+        }
         Invoke-NativeCommand $PythonExecutable @(
-            '-I', '-c',
-            "import fastapi, uvicorn, multipart, pix2text.serve; from importlib.metadata import version; print('Pix2Text ' + version('pix2text'))"
+            '-I', '-u', '-c',
+            "from rapidocr.utils.model_resolver import resolve_model_key; import fastapi, uvicorn, multipart, pix2text.serve; print('Pix2Text service imports OK')"
         )
         return $true
     }
     catch { Write-Step "服务依赖验证未通过，详情已记录到安装日志。"; return $false }
+}
+
+function Get-Pix2TextInstallArguments {
+    param([string]$PythonExecutable, [string]$Index, [bool]$Repair, [bool]$Update)
+    $arguments = @('pip', 'install', '--python', $PythonExecutable, '--index-url', $Index) + $coreRequirements + $inferenceRequirements
+    if ($Update) { $arguments += '--upgrade' }
+    if ($Repair) {
+        # 相同版本也可能存在残缺文件。仅重装四个核心包，保留大体积依赖和模型缓存。
+        foreach ($package in $corePackages) { $arguments += @('--reinstall-package', $package) }
+    }
+    return $arguments
 }
 
 function Find-UvExecutable {
@@ -187,7 +241,7 @@ function Install-Uv {
 try {
     if ($env:OS -ne 'Windows_NT') { throw '此脚本仅支持 Windows。' }
     [Net.ServicePointManager]::SecurityProtocol = $originalTls -bor [Net.SecurityProtocolType]::Tls12
-    $InstallDirectory = [IO.Path]::GetFullPath($InstallDirectory)
+    $InstallDirectory = Resolve-InstallDirectory $InstallDirectory $PSScriptRoot ([bool]$NoPause)
     New-Item -ItemType Directory -Path $InstallDirectory -Force | Out-Null
     $logDirectory = Join-Path $InstallDirectory 'Log'
     New-Item -ItemType Directory -Path $logDirectory -Force | Out-Null
@@ -226,6 +280,10 @@ try {
         }
 
         Write-Step "使用 uv：$uvExecutable；网络超时 $HttpTimeout 秒；下载并发 3。"
+        Write-Step "核心兼容版本：$($coreRequirements -join '；')。"
+        Write-Step "模型推理兼容版本：$($inferenceRequirements -join '；')。"
+        $repairExisting = $currentVersion -eq '3.11'
+        if ($repairExisting) { Write-Step '检测到已有环境需要安装/修复，将按兼容版本重装核心包，保留 Python 和缓存。' }
 
         if ($currentVersion -ne '3.11') {
             # 不再用 --clear 删除已有环境，防止误清理用户文件。
@@ -253,8 +311,7 @@ try {
         foreach ($index in @('https://pypi.tuna.tsinghua.edu.cn/simple', 'https://mirrors.ustc.edu.cn/pypi/simple', 'https://pypi.org/simple')) {
             try {
                 Invoke-WithRetry "安装 Pix2Text，使用源：$index" {
-                    $installArguments = @('pip', 'install', '--python', $pythonExecutable, '--index-url', $index, 'pix2text[serve]')
-                    if ($Upgrade) { $installArguments += '--upgrade' }
+                    $installArguments = Get-Pix2TextInstallArguments $pythonExecutable $index $repairExisting ([bool]$Upgrade)
                     Invoke-NativeCommand $uvExecutable $installArguments
                 }
                 $installed = $true
@@ -266,7 +323,7 @@ try {
         Write-Step '检查依赖一致性和服务模块...'
         Invoke-NativeCommand $uvExecutable @('pip', 'check', '--python', $pythonExecutable)
         if (-not (Test-Pix2Text $pythonExecutable $pix2TextExecutable)) {
-            throw '包下载完成，但服务验证失败。请查看日志；可使用 -Upgrade 重试更新依赖。'
+            throw '兼容依赖已安装，但服务导入验证仍失败。请查看本日志中的版本和完整异常；不要盲目升级 RapidOCR。'
         }
         Write-Step 'Pix2Text 安装完成，服务依赖验证通过。'
     }
