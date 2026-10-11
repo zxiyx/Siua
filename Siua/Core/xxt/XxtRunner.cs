@@ -190,80 +190,102 @@ public sealed class XxtRunner
     {
         foreach (var chapterTest in resolver.Tests)
         {
-            try
+            var retries = 0;
+            while (true)
             {
-                cancellationToken.ThrowIfCancellationRequested();
-                await chapterTest.LoadQuestionsAsync(cancellationToken);
-                if (chapterTest.IsCompleted)
+                try
                 {
-                    LogInfo($"该章节测试{chapterTest.SubmissionStatus}，无需重复答题");
-                    continue;
-                }
+                    cancellationToken.ThrowIfCancellationRequested();
+                    await chapterTest.LoadQuestionsAsync(cancellationToken);
+                    if (chapterTest.IsCompleted)
+                    {
+                        LogInfo($"该章节测试{chapterTest.SubmissionStatus}，无需重复答题");
+                        break;
+                    }
 
-                if (!chapterTest.HasQuestion)
-                {
-                    LogError("章节测试尚未完成，但未识别到题目，已停止以避免跳过测试");
-                    return false;
-                }
-
-                if (_settings.RegionScreenshot && !_settings.RandomTest)
-                {
-                    if (!await AnswerChapterAsync(chapterTest, cancellationToken))
+                    if (!chapterTest.HasQuestion)
+                    {
+                        LogError("章节测试尚未完成，但未识别到题目，已停止以避免跳过测试");
                         return false;
-                    await Task.Delay(_settings.AiAnsweringInterval, cancellationToken);
-                }
-                else
-                {
-                    for (var index = 0; index < chapterTest.Questions.Count; index++)
-                    {
-                        if (!await AnswerQuestionAsync(chapterTest.Questions[index], index + 1, cancellationToken))
-                            return false;
-                        if (!_settings.RandomTest)
-                            await Task.Delay(_settings.AiAnsweringInterval, cancellationToken);
                     }
-                }
 
-                cancellationToken.ThrowIfCancellationRequested();
-                if (_settings.RandomTest)
-                {
-                    await chapterTest.VerifyQuestionListAsync(cancellationToken);
-                    for (var index = 0; index < chapterTest.Questions.Count; index++)
+                    if (_settings.RegionScreenshot && !_settings.RandomTest)
                     {
-                        if (!await FillRandomQuestionAsync(chapterTest.Questions[index], index + 1,
-                                cancellationToken, prepare: false))
+                        if (!await AnswerChapterAsync(chapterTest, cancellationToken))
                             return false;
+                        await Task.Delay(_settings.AiAnsweringInterval, cancellationToken);
                     }
-                    // 修补后再只读核对一遍，避免后一道题的回调清空前一道题。
-                    await chapterTest.VerifyQuestionListAsync(cancellationToken);
-                    for (var index = 0; index < chapterTest.Questions.Count; index++)
+                    else
                     {
-                        try { await chapterTest.Questions[index].VerifyRandomAnswerAsync(cancellationToken); }
-                        catch (Exception exception) when (exception is PlaywrightException or TimeoutException)
+                        for (var index = 0; index < chapterTest.Questions.Count; index++)
                         {
-                            cancellationToken.ThrowIfCancellationRequested();
-                            LogError($"第 {index + 1} 题随机答案最终复核失败，已停止提交：{exception}");
-                            return false;
+                            if (!await AnswerQuestionAsync(chapterTest.Questions[index], index + 1, cancellationToken))
+                                return false;
+                            if (!_settings.RandomTest)
+                                await Task.Delay(_settings.AiAnsweringInterval, cancellationToken);
                         }
                     }
+
+                    cancellationToken.ThrowIfCancellationRequested();
+                    if (_settings.RandomTest)
+                    {
+                        await chapterTest.VerifyQuestionListAsync(cancellationToken);
+                        for (var index = 0; index < chapterTest.Questions.Count; index++)
+                        {
+                            if (!await FillRandomQuestionAsync(chapterTest.Questions[index], index + 1,
+                                    cancellationToken, prepare: false))
+                                return false;
+                        }
+                        // 修补后再只读核对一遍，避免后一道题的回调清空前一道题。
+                        await chapterTest.VerifyQuestionListAsync(cancellationToken);
+                        for (var index = 0; index < chapterTest.Questions.Count; index++)
+                        {
+                            try { await chapterTest.Questions[index].VerifyRandomAnswerAsync(cancellationToken); }
+                            catch (Exception exception) when (exception is PlaywrightException or TimeoutException)
+                            {
+                                cancellationToken.ThrowIfCancellationRequested();
+                                LogError($"第 {index + 1} 题随机答案最终复核失败，已停止提交：{exception}");
+                                return false;
+                            }
+                        }
+                    }
+                    LogInfo("正在提交章节测试...");
+                    await chapterTest.SubmitAnswerAsync(cancellationToken);
+                    var submitted = await resolver.ConfirmTestSubmissionAsync(cancellationToken);
+                    if (submitted)
+                    {
+                        LogInfo("已确认提交，正在检查提交结果...");
+                        submitted = await chapterTest.WaitForSubmissionAsync(cancellationToken);
+                    }
+                    if (!submitted)
+                    {
+                        if (!_settings.RandomTest || retries >= 5)
+                        {
+                            LogError(_settings.RandomTest
+                                ? "随机答题重做 5 次后仍未达到及格线，已停止，请手动检查测试"
+                                : "章节测试未达到及格线，已停止，请手动检查测试");
+                            return false;
+                        }
+                        await chapterTest.ConfirmRetryAsync(cancellationToken);
+                        LogInfo($"未达到及格线，正在重新随机答题（第 {++retries}/5 次重做）");
+                        await Task.Delay(500, cancellationToken);
+                        continue;
+                    }
+                    LogInfo($"该章节测试提交成功（{chapterTest.SubmissionStatus}），继续后续任务");
+                    await Task.Delay(_settings.ChapterJumpInterval, cancellationToken);
+                    break;
                 }
-                LogInfo("正在提交章节测试...");
-                await chapterTest.SubmitAnswerAsync(cancellationToken);
-                await resolver.ConfirmTestSubmissionAsync(cancellationToken);
-                LogInfo("已确认提交，正在检查提交结果...");
-                await chapterTest.WaitForSubmissionAsync(cancellationToken);
-                LogInfo($"该章节测试提交成功（{chapterTest.SubmissionStatus}），继续后续任务");
-                await Task.Delay(_settings.ChapterJumpInterval, cancellationToken);
-            }
-            catch (OperationCanceledException)
-            {
-                throw;
-            }
-            catch (Exception exception) when (
-                exception is PlaywrightException or TimeoutException && !_page.IsClosed)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                LogError($"章节测试控件处理失败，已停止以避免跳过测试：{exception}");
-                return false;
+                catch (OperationCanceledException)
+                {
+                    throw;
+                }
+                catch (Exception exception) when (
+                    exception is PlaywrightException or TimeoutException && !_page.IsClosed)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    LogError($"章节测试控件处理失败，已停止以避免跳过测试：{exception}");
+                    return false;
+                }
             }
         }
 

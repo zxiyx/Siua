@@ -108,7 +108,25 @@ public sealed class XxtChapterTest
             throw new PlaywrightException("章节测试题目数量、顺序或内容发生变化，已停止提交以避免漏题。");
     }
 
-    public async Task WaitForSubmissionAsync(
+    public static async Task<bool> IsBelowPassingScoreAsync(IPage page)
+    {
+        var message = page.Locator("#workpop:visible #popcontent");
+        return await message.CountAsync() > 0 &&
+            (await message.InnerTextAsync()).Replace(" ", "").Trim().TrimEnd('。', '！', '!') == "未达到及格线，请重做";
+    }
+
+    public async Task ConfirmRetryAsync(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (!await IsBelowPassingScoreAsync(_container.Page))
+            throw new PlaywrightException("未达及格线提示已变化，已停止重做。");
+        var popup = _container.Page.Locator("#workpop:visible");
+        await popup.Locator("#popok").ClickAsync(new() { Timeout = 5_000 }).WaitAsync(cancellationToken);
+        await popup.WaitForAsync(new() { State = WaitForSelectorState.Hidden, Timeout = 5_000 }).WaitAsync(cancellationToken);
+    }
+
+    // false 表示平台明确要求重做；其它未知结果仍按原有逻辑超时停止。
+    public async Task<bool> WaitForSubmissionAsync(
         CancellationToken cancellationToken = default, int timeoutMs = 30_000)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -123,6 +141,7 @@ public sealed class XxtChapterTest
             cancellationToken.ThrowIfCancellationRequested();
             try
             {
+                if (await IsBelowPassingScoreAsync(_container.Page)) return false;
                 // 提交可能刷新或替换内层 iframe，不能一直等待旧文档的单一完成标记。
                 var outer = await TryGetContentFrameAsync(_container.Locator("iframe").First);
                 if (outer is not null)
@@ -133,7 +152,7 @@ public sealed class XxtChapterTest
                     {
                         _testFrame = current;
                         IsCompleted = true;
-                        return;
+                        return true;
                     }
                 }
             }

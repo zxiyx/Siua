@@ -219,7 +219,7 @@ public sealed class XxtPageResolver
         await frame.WaitForLoadStateAsync(LoadState.DOMContentLoaded);
     }
 
-    public async Task ConfirmTestSubmissionAsync(
+    public async Task<bool> ConfirmTestSubmissionAsync(
         CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -237,7 +237,9 @@ public sealed class XxtPageResolver
             Timeout = _settings.PopupTimeout
         });
         cancellationToken.ThrowIfCancellationRequested();
+        if (await XxtChapterTest.IsBelowPassingScoreAsync(_page)) return false;
         await submitButton.ClickAsync();
+        return true;
     }
 
     public async Task<bool> NextPageAsync(CancellationToken cancellationToken = default, int timeout = 30_000,
