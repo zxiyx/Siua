@@ -170,7 +170,9 @@ public sealed class XxtPageResolver
     private static async Task<bool> ContainsChapterTestAsync(ILocator iframe, int depth = 0)
     {
         var element = await iframe.ElementHandleAsync();
-        var frame = element is null ? null : await element.ContentFrameAsync();
+        IFrame? frame;
+        try { frame = element is null ? null : await element.ContentFrameAsync(); }
+        finally { if (element is not null) await element.DisposeAsync(); }
         if (frame is null)
         {
             throw new PlaywrightException("无法进入附件 iframe 以识别章节测试。");

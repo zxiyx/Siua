@@ -1,13 +1,10 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
-using System.Globalization;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Avalonia.Controls.Notifications;
-using Avalonia.Data;
-using Avalonia.Data.Converters;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Siua.Services;
@@ -88,20 +85,5 @@ public partial class AiSettingsViewModel:ObservableObject
         _connectionTestCancellation?.Cancel();
         IsConnectionInfoOpen = false;
         RequestClose?.Invoke();
-    }
-}
-/// <summary>将 AI 服务商选择状态转换为绑定布尔值。</summary>
-public class ProviderToBoolConverter : IValueConverter
-{
-    public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
-    {
-        return value is string selected && parameter is string current && selected == current;
-    }
-
-    public object? ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
-    {
-        if (value is bool isChecked && isChecked && parameter is string provider)
-            return provider;
-        return BindingOperations.DoNothing;
     }
 }

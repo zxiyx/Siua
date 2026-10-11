@@ -16,21 +16,9 @@ internal static class ChapterAnswerParser
         out IReadOnlyDictionary<int, IReadOnlyList<string>> answers)
     {
         answers = new Dictionary<int, IReadOnlyList<string>>();
-        if (string.IsNullOrWhiteSpace(text) || questions.Count == 0 ||
+        if (!AnswerJson.TryUnwrap(text, out var json) || questions.Count == 0 ||
             questions.Select(question => question.Index).Distinct().Count() != questions.Count)
             return false;
-
-        var json = text.Trim();
-        if (json.StartsWith("```", StringComparison.Ordinal) && json.EndsWith("```", StringComparison.Ordinal))
-        {
-            var newline = json.IndexOf('\n');
-            if (newline < 0 || newline >= json.Length - 3)
-                return false;
-            var language = json[3..newline].Trim();
-            if (language.Length > 0 && !language.Equals("json", StringComparison.OrdinalIgnoreCase))
-                return false;
-            json = json[(newline + 1)..^3].Trim();
-        }
 
         try
         {

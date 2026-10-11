@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
@@ -17,6 +18,7 @@ public sealed class ZhsPageResolver
 
     private readonly IPage _page;
     private ILocator? _mainContainer;
+    public bool IsStudyVideo { get; private set; }
 
     public ZhsPageResolver(IPage page)
     {
@@ -29,15 +31,21 @@ public sealed class ZhsPageResolver
         try
         {
             var mainContainer = _page.Locator(MainContainerSelector).First;
+            await _page.Locator(ChapterSelector + ", .chapterScrollbar ul.list").First.WaitForAsync(
+                new LocatorWaitForOptions { State = WaitForSelectorState.Attached, Timeout = 30_000 });
+            IsStudyVideo = await _page.Locator(".chapterScrollbar ul.list").CountAsync() > 0;
+            if (IsStudyVideo) mainContainer = _page.Locator("body");
             await mainContainer.WaitForAsync(new LocatorWaitForOptions
             {
                 State = WaitForSelectorState.Visible,
                 Timeout = 30_000
             });
-            _mainContainer = mainContainer;
+            _mainContainer = IsStudyVideo ? _page.Locator("body") : mainContainer;
+            if (IsStudyVideo)
+                await new ZhsStudyVideoPage(_page).CloseStudyPopupsAsync(cancellationToken);
             return true;
         }
-        catch (PlaywrightException)
+        catch (Exception exception) when (exception is PlaywrightException or TimeoutException)
         {
             _mainContainer = null;
             return false;
@@ -50,7 +58,8 @@ public sealed class ZhsPageResolver
         if (_mainContainer is null && !await WaitLoadingAsync(cancellationToken))
             return [];
 
-        var chapterLocators = GetMainContainer().Locator(ChapterSelector);
+        var chapterLocators = GetMainContainer().Locator(IsStudyVideo
+            ? ".chapterScrollbar ul.list" : ChapterSelector);
         await chapterLocators.First.WaitForAsync(new LocatorWaitForOptions
         {
             State = WaitForSelectorState.Attached,
@@ -61,7 +70,7 @@ public sealed class ZhsPageResolver
         foreach (var chapterLocator in await chapterLocators.AllAsync())
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var chapter = new ZhsChapter(chapterLocator);
+            var chapter = new ZhsChapter(chapterLocator, IsStudyVideo);
             await chapter.ResolveAsync(cancellationToken);
             chapters.Add(chapter);
         }

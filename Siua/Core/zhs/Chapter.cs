@@ -17,10 +17,12 @@ public sealed class ZhsChapter
 
     private readonly ILocator _chapterLocator;
     private readonly List<ZhsSection> _sections = [];
+    private readonly bool _studyVideo;
 
-    public ZhsChapter(ILocator chapterLocator)
+    public ZhsChapter(ILocator chapterLocator, bool studyVideo = false)
     {
         _chapterLocator = chapterLocator;
+        _studyVideo = studyVideo;
     }
 
     public IReadOnlyList<ZhsSection> Sections => _sections;
@@ -32,6 +34,27 @@ public sealed class ZhsChapter
         cancellationToken.ThrowIfCancellationRequested();
         _sections.Clear();
         ChapterTest = null;
+
+        if (_studyVideo)
+        {
+            foreach (var row in await _chapterLocator.Locator("li.video").AllAsync())
+            {
+                // 用目录编号定位，Vue 重绘或列表变化后仍指向同一小节。
+                var number = (await row.Locator(".hour").InnerTextAsync()).Trim();
+                if (string.IsNullOrEmpty(number))
+                    throw new InvalidOperationException("智慧树小节缺少目录编号。");
+                var locator = _chapterLocator.Locator("li.video").Filter(new LocatorFilterOptions
+                {
+                    Has = _chapterLocator.Page.Locator(".hour").Filter(new LocatorFilterOptions
+                    { HasTextRegex = new Regex("^\\s*" + Regex.Escape(number) + "\\s*$") })
+                });
+                _sections.Add(new ZhsSection(locator, true));
+            }
+            var test = _chapterLocator.Locator("li.chapter-test").First;
+            if (await test.CountAsync() > 0)
+                ChapterTest = new ZhsChapterTest(test, true);
+            return;
+        }
 
         var content = _chapterLocator
             .Locator("div.el-collapse-item__wrap div.el-collapse-item__content")
@@ -51,6 +74,8 @@ public sealed class ZhsChapter
     public async Task ExpandAsync(CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        if (_studyVideo)
+            return;
         var header = _chapterLocator.Locator("div.el-collapse-item__header").First;
         if (!string.Equals(
                 await header.GetAttributeAsync("aria-expanded"),
@@ -78,16 +103,20 @@ public sealed class ZhsSection
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     private readonly ILocator _locator;
+    private readonly bool _studyVideo;
 
-    public ZhsSection(ILocator locator)
+    public ZhsSection(ILocator locator, bool studyVideo = false)
     {
         _locator = locator;
+        _studyVideo = studyVideo;
     }
 
     public async Task<double> GetProgressPercentAsync(
         CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        if (_studyVideo)
+            return await _locator.Locator(".time_icofinish").CountAsync() > 0 ? 100 : 0;
         var progressPath = _locator
             .Locator(".progress-div .el-progress-circle__path")
             .First;
@@ -119,6 +148,11 @@ public sealed class ZhsSection
 
     public async Task<bool> IsCompletedAsync(CancellationToken cancellationToken = default) =>
         await GetProgressPercentAsync(cancellationToken) >= 99.9;
+
+    public Task<bool> IsCurrentAsync() => _locator.EvaluateAsync<bool>(
+        "row => row.classList.contains('current_play')");
+
+    public async Task<string> GetNameAsync() => (await _locator.InnerTextAsync()).Trim();
 
     public async Task ClickAsync(CancellationToken cancellationToken = default)
     {

@@ -53,6 +53,8 @@ public sealed class ZhsRunner
         }
 
         LogInfo("智慧树课程目录解析完成");
+        if (resolver.IsStudyVideo)
+            LogInfo("当前为累计时长课程，使用正常倍速播放，以目录完成图标为准");
         foreach (var chapter in chapters)
         {
             try
@@ -76,10 +78,11 @@ public sealed class ZhsRunner
                         throw;
                     }
                     catch (Exception exception) when (
-                        exception is PlaywrightException or InvalidOperationException &&
+                        exception is PlaywrightException or InvalidOperationException or TimeoutException &&
                         !_page.IsClosed)
                     {
-                        LogError($"智慧树小节处理失败，已跳过：{exception}");
+                        LogError($"智慧树小节处理失败，{(resolver.IsStudyVideo ? "已停止" : "已跳过")}：{exception}");
+                        if (resolver.IsStudyVideo) return false;
                     }
                 }
 
@@ -105,10 +108,11 @@ public sealed class ZhsRunner
                 throw;
             }
             catch (Exception exception) when (
-                exception is PlaywrightException or InvalidOperationException &&
+                exception is PlaywrightException or InvalidOperationException or TimeoutException &&
                 !_page.IsClosed)
             {
-                LogError($"智慧树章节处理失败，已跳过：{exception}");
+                LogError($"智慧树章节处理失败，{(resolver.IsStudyVideo ? "已停止" : "已跳过")}：{exception}");
+                if (resolver.IsStudyVideo) return false;
             }
         }
 
@@ -131,6 +135,14 @@ public sealed class ZhsRunner
         }
 
         LogInfo("进入小节");
+        if (resolver.IsStudyVideo)
+        {
+            LogInfo($"正常播放：{await section.GetNameAsync()}");
+            await new ZhsStudyVideoPage(_page).PlaySectionAsync(section, _settings.IsMuted, cancellationToken);
+            LogInfo("目录已显示小节完成，继续后续任务");
+            await Task.Delay(_settings.ChapterJumpInterval, cancellationToken);
+            return;
+        }
         await section.ClickAsync(cancellationToken);
         if (!await resolver.WaitForContentLoadAsync(cancellationToken))
         {
@@ -176,9 +188,15 @@ public sealed class ZhsRunner
     {
         var originalCourseUrl = _page.Url;
         IPage? examPage = null;
+        var succeeded = false;
         try
         {
             LogInfo("进入智慧树章节测试...");
+            if (chapterTest.IsStudyVideo)
+            {
+                await new ZhsStudyVideoPage(_page).CloseStudyPopupsAsync(cancellationToken);
+                await new ZhsStudyVideoPage(_page).PauseAsync();
+            }
             examPage = await chapterTest.OpenAsync(_page, cancellationToken);
             var questionCount = await chapterTest.GetQuestionCountAsync(
                 examPage,
@@ -187,7 +205,7 @@ public sealed class ZhsRunner
                 return DisableAutoTest("未识别到智慧树章节测试题目，已关闭自动答题");
 
             LogInfo($"检测到 {questionCount} 道智慧树章节测试题");
-            IReadOnlyDictionary<string, IReadOnlyList<string>>? chapterAnswers = null;
+            IReadOnlyDictionary<string, IReadOnlyList<ZhsAnswerOption>>? chapterAnswers = null;
             if (_settings.RegionScreenshot && !_settings.RandomTest)
             {
                 chapterAnswers = await AnswerChapterAsync(chapterTest, examPage, questionCount, cancellationToken);
@@ -198,6 +216,7 @@ public sealed class ZhsRunner
             var processedCount = 0;
             var previousQuestionKey = string.Empty;
             var processedKeys = new HashSet<string>(StringComparer.Ordinal);
+            var savedAnswers = new Dictionary<string, IReadOnlyDictionary<string, bool>>(StringComparer.Ordinal);
             for (var index = 0; index < questionCount; index++)
             {
                 cancellationToken.ThrowIfCancellationRequested();
@@ -218,23 +237,28 @@ public sealed class ZhsRunner
                 {
                     if (!chapterAnswers.TryGetValue(question.Key, out var answers))
                         return DisableAutoTest("区域截图后的题目发生变化，已停止答题");
-                    var selected = question.Answers.Where(option => answers.Contains(option.Marker)).ToArray();
+                    // 区域截图后切题可能重排选项，按选项 ID/内容重新映射，不沿用字母位置。
+                    var selected = question.Answers.Where(option => answers.Any(answer =>
+                        string.IsNullOrEmpty(answer.Value)
+                            ? option.Text == answer.Text
+                            : option.Value == answer.Value && option.Text == answer.Text)).ToArray();
                     if (selected.Length != answers.Count)
                         return DisableAutoTest("区域截图后的选项发生变化，已停止答题");
-                    LogInfo(AnswerLogFormatter.Format(question.Number, index + 1, answers));
-                    foreach (var option in selected)
-                        await option.SelectAsync(cancellationToken);
+                    LogInfo(AnswerLogFormatter.Format(question.Number, index + 1, selected.Select(option => option.Marker).ToArray()));
+                    await question.ApplyAnswersAsync(selected, cancellationToken);
                 }
                 else if (!await AnswerQuestionAsync(question, index + 1, cancellationToken))
                     return false;
 
+                savedAnswers.Add(question.Key, await question.ReadAnswerStateAsync());
                 processedCount++;
                 if (chapterAnswers is null && !_settings.RandomTest)
                     await Task.Delay(_settings.AiAnsweringInterval, cancellationToken);
                 var hasNextQuestion = await chapterTest.MoveNextOrSaveAsync(
                     examPage,
                     question.Key,
-                    cancellationToken);
+                    cancellationToken,
+                    isLastQuestion: processedCount == questionCount);
                 if (!hasNextQuestion)
                     break;
             }
@@ -245,11 +269,19 @@ public sealed class ZhsRunner
                     $"智慧树章节测试题目数量异常：应处理 {questionCount} 题，实际处理 {processedCount} 题");
             }
 
+            await chapterTest.VerifySavedAnswersAsync(examPage, savedAnswers, cancellationToken);
             await chapterTest.SubmitAsync(
                 examPage,
                 _settings.PopupTimeout,
                 cancellationToken);
-            LogInfo("智慧树章节测试提交成功");
+            if (chapterTest.IsStudyVideo)
+            {
+                var score = await chapterTest.WaitForScoreAsync(examPage, cancellationToken);
+                LogInfo($"智慧树章节测试提交成功，成绩：{score}");
+                await chapterTest.ReturnFromScoreAsync(examPage, cancellationToken);
+            }
+            else LogInfo("智慧树章节测试提交成功");
+            succeeded = true;
             await Task.Delay(_settings.ChapterJumpInterval, cancellationToken);
             return true;
         }
@@ -264,7 +296,7 @@ public sealed class ZhsRunner
         }
         finally
         {
-            if (examPage is not null)
+            if (examPage is not null && succeeded)
             {
                 try
                 {
@@ -289,6 +321,8 @@ public sealed class ZhsRunner
         if (_settings.RandomTest)
             return await SelectRandomAnswersAsync(question, cancellationToken);
 
+        await question.WaitForContentAsync(cancellationToken);
+        await question.LoadAsync(cancellationToken);
         var image = await question.CaptureImageAsync(cancellationToken);
         if (image is null)
             return DisableAutoTest("智慧树题目截图失败，已关闭自动答题");
@@ -304,24 +338,25 @@ public sealed class ZhsRunner
             return DisableAutoTest("AI 配置或回答异常，已关闭智慧树自动答题");
 
         LogInfo(AnswerLogFormatter.Format(question.Number, questionIndex, answer));
-        var selectedCount = 0;
+        var selected = new List<ZhsAnswerOption>();
         foreach (var option in question.Answers)
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (!AnswerMatcher.SelectsOption(answer, option.Marker, option.Text))
                 continue;
 
-            await option.SelectAsync(cancellationToken);
-            selectedCount++;
+            selected.Add(option);
             if (!question.AllowsMultipleAnswers)
                 break;
         }
 
-        return selectedCount > 0 ||
-               DisableAutoTest("AI 返回的答案无法匹配智慧树题目选项，已关闭自动答题");
+        if (selected.Count == 0)
+            return DisableAutoTest("AI 返回的答案无法匹配智慧树题目选项，已关闭自动答题");
+        await question.ApplyAnswersAsync(selected, cancellationToken);
+        return true;
     }
 
-    private async Task<IReadOnlyDictionary<string, IReadOnlyList<string>>?> AnswerChapterAsync(
+    private async Task<IReadOnlyDictionary<string, IReadOnlyList<ZhsAnswerOption>>?> AnswerChapterAsync(
         ZhsChapterTest chapterTest, IPage examPage, int questionCount, CancellationToken cancellationToken)
     {
         var questions = await chapterTest.LoadAllQuestionsAsync(examPage, cancellationToken);
@@ -350,7 +385,8 @@ public sealed class ZhsRunner
             DisableAutoTest("智慧树整份试卷答案的题号或选项不匹配，未填写或提交，已停止答题");
             return null;
         }
-        return questions.Select((question, index) => (question.Key, Answers: answers[index + 1]))
+        return questions.Select((question, index) => (question.Key, Answers:
+                (IReadOnlyList<ZhsAnswerOption>)question.Answers.Where(option => answers[index + 1].Contains(option.Marker)).ToArray()))
             .ToDictionary(item => item.Key, item => item.Answers, StringComparer.Ordinal);
     }
 
@@ -364,11 +400,7 @@ public sealed class ZhsRunner
         if (selectedIndexes.Count == 0)
             return DisableRandomTest("未识别到智慧树题目选项，已关闭随机答题");
 
-        foreach (var index in selectedIndexes)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            await question.Answers[index].SelectAsync(cancellationToken);
-        }
+        await question.ApplyAnswersAsync(selectedIndexes.Select(index => question.Answers[index]).ToArray(), cancellationToken);
 
         LogInfo($"已随机选择 {selectedIndexes.Count} 个答案");
         return true;

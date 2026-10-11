@@ -3,6 +3,7 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:vm="using:Siua.ViewModels"
+             xmlns:co="using:Siua.Common"
              mc:Ignorable="d" d:DesignWidth="900" d:DesignHeight="680"
              x:DataType="vm:StartViewModel"
              xmlns:p="https://github.com/kikipoulet/SukiUI" 
@@ -10,7 +11,7 @@
              xmlns:suki="clr-namespace:SukiUI.Controls;assembly=SukiUI"
              x:Class="Siua.Views.Pages.StartView">
     <UserControl.Resources>
-        <vm:StringEqualsConverter x:Key="StringEquals"/>
+        <co:StringEqualsConverter x:Key="StringEquals"/>
     </UserControl.Resources>
 
     <ScrollViewer HorizontalScrollBarVisibility="Disabled">

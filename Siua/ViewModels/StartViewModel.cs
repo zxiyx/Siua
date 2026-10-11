@@ -3,11 +3,8 @@ using System.Collections.Specialized;
 using System.Collections.ObjectModel;
 using System.Collections.Generic;
 using System.ComponentModel;
-using System.Globalization;
 using System.Linq;
 using System.Threading.Tasks;
-using Avalonia.Data;
-using Avalonia.Data.Converters;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Material.Icons;
@@ -45,7 +42,7 @@ public partial class StartViewModel :PageBase
     private bool _refreshingAccounts;
     public ObservableCollection<LoginAccount> LoginAccounts { get; } = [];
     [ObservableProperty] private LoginAccount? _selectedLoginAccount;
-    public bool IsAutoLoginSupported => SelectedPlatform == LearningPlatformCatalog.XueXiTong;
+    public bool IsAutoLoginSupported => LearningPlatformCatalog.IsSupported(SelectedPlatform);
     public bool CanConfigureAutoLogin => !IsRunning && IsAutoLoginSupported;
     public bool CanSelectLoginAccount => CanConfigureAutoLogin && Settings.Login.Enabled && LoginAccounts.Count > 0;
     public string AutoLoginDescription => !IsAutoLoginSupported ? "当前平台需手动登录，可在设置中预先保存账号"
@@ -272,14 +269,4 @@ public partial class StartViewModel :PageBase
 
         SelectedCourse = Settings.Courses.FirstOrDefault();
     }
-}
-
-/// <summary>将字符串相等关系转换为绑定布尔值。</summary>
-public class StringEqualsConverter : IValueConverter
-{
-    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
-        => value is string selected && parameter is string current && selected == current;
-
-    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
-        => value is true && parameter is string current ? current : BindingOperations.DoNothing;
 }

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
@@ -30,9 +31,12 @@ public sealed class ZhsChapterTest
 
     private readonly ILocator _locator;
 
-    public ZhsChapterTest(ILocator locator)
+    public bool IsStudyVideo { get; }
+
+    public ZhsChapterTest(ILocator locator, bool studyVideo = false)
     {
         _locator = locator;
+        IsStudyVideo = studyVideo;
     }
 
     public async Task<bool> IsAvailableAsync() =>
@@ -84,7 +88,18 @@ public sealed class ZhsChapterTest
             State = WaitForSelectorState.Attached,
             Timeout = 30_000
         });
-        return await questions.CountAsync();
+        var previousCount = -1;
+        for (var attempt = 0; attempt < 40; attempt++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var count = await questions.CountAsync();
+            var cardCount = await examPage.Locator(".answerCard_list li").CountAsync();
+            if (count > 0 && count == previousCount && (cardCount == 0 || cardCount == count))
+                return count;
+            previousCount = count;
+            await Task.Delay(250, cancellationToken);
+        }
+        throw new TimeoutException("智慧树试卷题目数量与答题卡不一致或尚未加载完整。");
     }
 
     public async Task<ZhsQuestion> LoadCurrentQuestionAsync(
@@ -113,34 +128,39 @@ public sealed class ZhsChapterTest
         for (var index = 0; index < count; index++)
         {
             var question = new ZhsQuestion(containers.Nth(index));
+            await question.WaitForContentAsync(cancellationToken);
             await question.LoadAsync(cancellationToken);
             questions.Add(question);
         }
         return questions;
     }
 
-    public Task<byte[]> CaptureRegionAsync(IPage examPage, int questionCount,
+    public async Task<byte[]> CaptureRegionAsync(IPage examPage, int questionCount,
         CancellationToken cancellationToken = default)
     {
+        foreach (var container in await examPage.Locator(QuestionSelector).AllAsync())
+            await new ZhsQuestion(container).WaitForContentAsync(cancellationToken);
         // 最近的共同祖先包含全卷题目，避免只截到当前分页中可见的一题。
         var region = examPage.Locator(QuestionSelector).First.Locator(
             "xpath=ancestor::*[count(.//div[contains(concat(' ', normalize-space(@class), ' '), ' examPaper_subject ') " +
             $"and contains(concat(' ', normalize-space(@class), ' '), ' mt20 ')]) = {questionCount}][1]");
-        return ChapterRegionCapture.CaptureAsync(examPage.MainFrame, region, cancellationToken, QuestionSelector);
+        return await ChapterRegionCapture.CaptureAsync(examPage.MainFrame, region, cancellationToken, QuestionSelector);
     }
 
     public async Task<bool> MoveNextOrSaveAsync(
         IPage examPage,
         string previousQuestionKey,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        bool isLastQuestion = false)
     {
         cancellationToken.ThrowIfCancellationRequested();
         var switchBox = examPage.Locator(SwitchButtonSelector).First;
-        await switchBox.WaitForAsync(new LocatorWaitForOptions
-        {
-            State = WaitForSelectorState.Visible,
-            Timeout = 15_000
-        });
+        if (!IsStudyVideo)
+            await switchBox.WaitForAsync(new LocatorWaitForOptions
+            {
+                State = WaitForSelectorState.Visible,
+                Timeout = 15_000
+            });
 
         var saveButton = switchBox.Locator("button").Filter(
             new LocatorFilterOptions { HasTextRegex = SaveButtonText });
@@ -154,7 +174,19 @@ public sealed class ZhsChapterTest
         var nextButton = switchBox.Locator("button").Filter(
             new LocatorFilterOptions { HasTextRegex = NextButtonText });
         if (await nextButton.CountAsync() == 0 || !await nextButton.First.IsVisibleAsync())
-            throw new PlaywrightException("智慧树章节测试没有找到可见的“下一题”按钮。");
+        {
+            // 下一题可能在切题时短暂隐藏；必须同时核对处理数量和最后题目的身份。
+            await Task.Delay(500, cancellationToken);
+            if (await nextButton.CountAsync() == 0 || !await nextButton.First.IsVisibleAsync())
+            {
+                var last = new ZhsQuestion(examPage.Locator(QuestionSelector).Last);
+                await last.LoadAsync(cancellationToken);
+                var current = await LoadCurrentQuestionAsync(examPage, cancellationToken);
+                if (IsStudyVideo && isLastQuestion && last.Key == previousQuestionKey && current.Key == last.Key)
+                    return false;
+                throw new PlaywrightException("智慧树章节测试没有找到可见的“下一题”按钮，且未确认已到最后一题。");
+            }
+        }
 
         await nextButton.First.ClickAsync();
         await WaitForQuestionChangedAsync(
@@ -199,6 +231,51 @@ public sealed class ZhsChapterTest
             Timeout = timeout
         });
         await confirmButton.ClickAsync();
+    }
+
+    public async Task<string> WaitForScoreAsync(IPage examPage, CancellationToken cancellationToken = default)
+    {
+        await examPage.Locator(".scoreTipBox").First.WaitForAsync(new LocatorWaitForOptions
+        { State = WaitForSelectorState.Visible, Timeout = 30_000 }).WaitAsync(cancellationToken);
+        var detail = examPage.Locator(".scoreTipBox .scoreDetail").Filter(new LocatorFilterOptions
+        { HasTextRegex = new Regex(@"\d") }).First;
+        await detail.WaitForAsync(new LocatorWaitForOptions
+        { State = WaitForSelectorState.Visible, Timeout = 10_000 }).WaitAsync(cancellationToken);
+        var score = await detail.InnerTextAsync();
+        if (string.IsNullOrWhiteSpace(score))
+            throw new InvalidOperationException("提交后成绩提示为空，请检查考试页面。");
+        return NormalizeText(score);
+    }
+
+    public async Task VerifySavedAnswersAsync(IPage examPage,
+        IReadOnlyDictionary<string, IReadOnlyDictionary<string, bool>> expected,
+        CancellationToken cancellationToken = default)
+    {
+        var containers = await examPage.Locator(QuestionSelector).AllAsync();
+        if (containers.Count != expected.Count)
+            throw new InvalidOperationException("提交前试卷题目数量发生变化，已停止提交。");
+        foreach (var container in containers)
+        {
+            var question = new ZhsQuestion(container);
+            await question.LoadAsync(cancellationToken);
+            var actual = await question.ReadAnswerStateAsync();
+            if (!expected.TryGetValue(question.Key, out var saved) || actual.Count != saved.Count ||
+                actual.Any(pair => !saved.TryGetValue(pair.Key, out var selected) || selected != pair.Value))
+                throw new InvalidOperationException($"第 {question.Number} 题切题后答案状态发生变化，已停止提交以避免漏题。");
+        }
+    }
+
+    public async Task ReturnFromScoreAsync(IPage examPage, CancellationToken cancellationToken = default)
+    {
+        await examPage.Locator(".scoreTipBox a[title='返回作业考试']").ClickAsync(
+            new LocatorClickOptions { Timeout = 10_000 });
+        for (var attempt = 0; attempt < 100; attempt++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (examPage.IsClosed) return;
+            await Task.Delay(100, cancellationToken);
+        }
+        throw new TimeoutException("已点击返回作业考试，但考试页未关闭，请检查页面提示。");
     }
 
     public static async Task CloseAndReturnAsync(
@@ -291,6 +368,22 @@ public sealed class ZhsQuestion
         AllowsMultipleAnswers = Type.Contains("多选", StringComparison.Ordinal);
 
         var optionRows = _container.Locator("div.subject_node div.nodeLab");
+        // 等待异步组件把选项补齐，避免随机答题在选项尚未渲染完时取样。
+        string? previousOptions = null;
+        var stableSamples = 0;
+        for (var attempt = 0; attempt < 40; attempt++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var snapshot = await optionRows.EvaluateAllAsync<string>(
+                "rows => JSON.stringify(rows.map(r => [r.textContent, r.querySelector('input')?.value]))");
+            if (snapshot != "[]" && snapshot == previousOptions && ++stableSamples >= 2)
+                break;
+            if (snapshot != previousOptions) stableSamples = 0;
+            previousOptions = snapshot;
+            if (attempt == 39 && snapshot != "[]")
+                throw new TimeoutException($"第 {Number} 题选项持续变化，已停止答题。");
+            await Task.Delay(150, cancellationToken);
+        }
         var optionCount = await optionRows.CountAsync();
         for (var index = 0; index < optionCount; index++)
         {
@@ -298,7 +391,7 @@ public sealed class ZhsQuestion
             var row = optionRows.Nth(index);
             var marker = ZhsChapterTest.NormalizeText(
                 await ZhsChapterTest.TryGetInnerTextAsync(
-                    row.Locator("span.ABCase").First) ?? string.Empty);
+                    row.Locator("span.ABCase, .label span.mr10").First) ?? string.Empty).TrimEnd('.', '、', '．');
             var text = ZhsChapterTest.NormalizeText(
                 await ZhsChapterTest.TryGetInnerTextAsync(
                     row.Locator("div.examquestions-answer").First) ?? string.Empty);
@@ -310,14 +403,74 @@ public sealed class ZhsQuestion
                 inputType,
                 "checkbox",
                 StringComparison.OrdinalIgnoreCase);
-            _answers.Add(new ZhsAnswerOption(row, input, marker, text));
+            _answers.Add(new ZhsAnswerOption(row, input, marker, text,
+                await input.CountAsync() > 0 ? await input.GetAttributeAsync("value") ?? "" : ""));
         }
+    }
+
+    public async Task WaitForContentAsync(CancellationToken cancellationToken = default)
+    {
+        // 某些题干由异步组件生成，HTML 空壳不能直接送给模型。
+        for (var attempt = 0; attempt < 40; attempt++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (await _container.EvaluateAsync<bool>("""
+                q => {
+                    const stem = q.querySelector('.subject_describe');
+                    if (!stem) return true; // 兼容旧版题干结构
+                    const images = [...stem.querySelectorAll('img')];
+                    return (!!stem.textContent.trim() || images.length > 0 || !!stem.querySelector('canvas, svg')) &&
+                        images.every(i => i.complete && i.naturalWidth > 0);
+                }
+                """)) return;
+            await Task.Delay(250, cancellationToken);
+        }
+        throw new TimeoutException($"第 {Number} 题题干尚未加载，已停止截图答题。");
+    }
+
+    public async Task ApplyAnswersAsync(IReadOnlyCollection<ZhsAnswerOption> selected,
+        CancellationToken cancellationToken = default)
+    {
+        var number = _container.Locator("div.subject_num span").First;
+        var currentKey = await number.GetAttributeAsync("id") ??
+            ZhsChapterTest.NormalizeText(await number.InnerTextAsync());
+        if (currentKey != Key)
+            throw new InvalidOperationException($"第 {Number} 题已切换，停止填写过期答案。");
+        foreach (var option in _answers)
+            if (!await option.MatchesSnapshotAsync())
+                throw new InvalidOperationException($"第 {Number} 题选项发生变化，停止填写过期答案。");
+        if (selected.Count == 0 || (!AllowsMultipleAnswers && selected.Count != 1))
+            throw new InvalidOperationException($"第 {Number} 题答案数量不符合题型。");
+        for (var attempt = 0; attempt < 3; attempt++)
+        {
+            foreach (var option in _answers)
+            {
+                var expected = selected.Contains(option);
+                if (expected || AllowsMultipleAnswers)
+                    await option.SetSelectedAsync(expected, cancellationToken);
+            }
+            await Task.Delay(400, cancellationToken);
+            var matches = true;
+            foreach (var option in _answers)
+                matches &= await option.IsSelectedAsync() == selected.Contains(option);
+            if (matches) return;
+        }
+        throw new InvalidOperationException($"第 {Number} 题选择后校验失败，已停止以避免漏题。");
+    }
+
+    public async Task<IReadOnlyDictionary<string, bool>> ReadAnswerStateAsync()
+    {
+        var state = new Dictionary<string, bool>(StringComparer.Ordinal);
+        foreach (var option in _answers)
+            state.Add(option.Value + "\u001f" + option.Text, await option.IsSelectedAsync());
+        return state;
     }
 
     public async Task<byte[]?> CaptureImageAsync(
         CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        await WaitForContentAsync(cancellationToken);
         try
         {
             return await _container.ScreenshotAsync(new LocatorScreenshotOptions
@@ -338,37 +491,66 @@ public sealed class ZhsQuestion
 public sealed class ZhsAnswerOption
 {
     private readonly ILocator _row;
-    private readonly ILocator _input;
 
     public ZhsAnswerOption(
         ILocator row,
         ILocator input,
         string marker,
-        string text)
+        string text,
+        string value = "")
     {
         _row = row;
-        _input = input;
         Marker = marker;
         Text = text;
+        Value = value;
     }
 
     public string Marker { get; }
     public string Text { get; }
+    public string Value { get; }
 
-    public async Task SelectAsync(CancellationToken cancellationToken = default)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-        var clickTarget = _row.Locator("div.label.clearfix").First;
-        await clickTarget.ScrollIntoViewIfNeededAsync();
-        await clickTarget.ClickAsync(new LocatorClickOptions { Timeout = 15_000 });
-
-        if (await _input.CountAsync() > 0 && !await _input.IsCheckedAsync())
-        {
-            await _input.CheckAsync(new LocatorCheckOptions
-            {
-                Force = true,
-                Timeout = 10_000
-            });
+    public Task<bool> MatchesSnapshotAsync() => _row.EvaluateAsync<bool>("""
+        (row, expected) => {
+            const input = row.querySelector('input[type=radio], input[type=checkbox]');
+            const text = row.querySelector('.examquestions-answer')?.innerText.replace(/\s+/g, ' ').trim() || '';
+            return (input?.getAttribute('value') || '') === expected.value && text === expected.text;
         }
+        """, new { value = Value, text = Text });
+
+    public Task<bool> IsSelectedAsync() => _row.EvaluateAsync<bool>("""
+        row => {
+            const input = row.querySelector('input[type=radio], input[type=checkbox]');
+            const q = row.closest('.examPaper_subject');
+            const model = q && q.querySelector(':scope > input[type=hidden]');
+            if (model && input) {
+                try {
+                    const values = JSON.parse(model.value);
+                    if (Array.isArray(values)) return values.some(v => String(v) === input.value);
+                } catch {}
+            }
+            const custom = row.querySelector('[aria-checked]');
+            if (custom) return custom.getAttribute('aria-checked') === 'true';
+            if (input) return input.checked;
+            throw new Error('未识别到可验证的选项状态');
+        }
+        """);
+
+    public Task SelectAsync(CancellationToken cancellationToken = default) => SetSelectedAsync(true, cancellationToken);
+
+    public async Task SetSelectedAsync(bool selected, CancellationToken cancellationToken = default)
+    {
+        for (var attempt = 0; attempt < 3; attempt++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (await IsSelectedAsync() == selected) return;
+            await _row.Locator("div.label.clearfix").First.ClickAsync(new LocatorClickOptions { Timeout = 10_000 });
+            // 等待 Vue 写入真实答题状态，不强行 Check 隐藏 input。
+            for (var poll = 0; poll < 10; poll++)
+            {
+                await Task.Delay(100, cancellationToken);
+                if (await IsSelectedAsync() == selected) return;
+            }
+        }
+        throw new InvalidOperationException($"智慧树选项 {Marker} 点击后未保存选择状态。");
     }
 }

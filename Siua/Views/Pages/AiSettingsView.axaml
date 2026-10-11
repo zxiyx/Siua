@@ -11,7 +11,7 @@
              x:Class="Siua.Views.Pages.AiSettingsView"
              x:DataType="vm:AiSettingsViewModel">
     <UserControl.Resources>
-        <vm:ProviderToBoolConverter x:Key="ProviderToBool"/>
+        <co:StringEqualsConverter x:Key="ProviderToBool"/>
     </UserControl.Resources>
 
     <ScrollViewer HorizontalScrollBarVisibility="Disabled">

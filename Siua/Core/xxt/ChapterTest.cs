@@ -195,8 +195,9 @@ public sealed class XxtChapterTest
         await locator.WaitForAsync();
         var element = await locator.ElementHandleAsync()
             ?? throw new PlaywrightException("无法获取测试 iframe 元素。");
-        var frame = await element.ContentFrameAsync()
-            ?? throw new PlaywrightException("无法进入测试 iframe。");
+        IFrame frame;
+        try { frame = await element.ContentFrameAsync() ?? throw new PlaywrightException("无法进入测试 iframe。"); }
+        finally { await element.DisposeAsync(); }
         await XxtPageResolver.WaitForFrameContentAsync(frame, locator);
         return frame;
     }
@@ -419,7 +420,9 @@ public sealed partial class XxtQuestion
     {
         cancellationToken.ThrowIfCancellationRequested();
         var handle = await iframe.ElementHandleAsync();
-        var frame = handle is null ? null : await handle.ContentFrameAsync();
+        IFrame? frame;
+        try { frame = handle is null ? null : await handle.ContentFrameAsync(); }
+        finally { if (handle is not null) await handle.DisposeAsync(); }
         if (frame is null)
             throw new PlaywrightException("无法进入学习通答题用的富文本编辑器。");
 

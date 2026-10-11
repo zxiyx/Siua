@@ -118,20 +118,13 @@ public partial class GlobalSettings : ObservableObject, IDisposable
         CurrentAi.PropertyChanged -= HandleSettingsChanged;
         CancelScheduledSave();
 
-        Interlocked.Exchange(ref _isDisposed, 0);
-        try
-        {
-            SaveToJson().GetAwaiter().GetResult();
-        }
-        finally
-        {
-            Interlocked.Exchange(ref _isDisposed, 1);
-        }
+        // 最后一次落盘不重新开放已释放的设置对象。
+        _storage.SaveAsync(CreateSnapshot()).GetAwaiter().GetResult();
     }
 
     partial void OnCoursesChanging(ObservableCollection<string> value)
     {
-        value.CollectionChanged -= HandleCollectionChanged;
+        Courses.CollectionChanged -= HandleCollectionChanged;
     }
 
     partial void OnCoursesChanged(ObservableCollection<string> value)
@@ -219,16 +212,16 @@ public partial class GlobalSettings : ObservableObject, IDisposable
         }
 
         CancellationTokenSource current;
-        CancellationTokenSource? previous;
         lock (_saveScheduleLock)
         {
-            previous = _saveDelayCts;
+            if (Volatile.Read(ref _isDisposed) != 0)
+                return;
+            // 取消和释放使用同一把锁；释放只由等待任务的 finally 负责。
+            _saveDelayCts?.Cancel();
             current = new CancellationTokenSource();
             _saveDelayCts = current;
         }
 
-        previous?.Cancel();
-        previous?.Dispose();
         _ = SaveAfterDelayAsync(current);
     }
 
@@ -253,22 +246,18 @@ public partial class GlobalSettings : ObservableObject, IDisposable
                 {
                     _saveDelayCts = null;
                 }
+                delaySource.Dispose();
             }
-
-            delaySource.Dispose();
         }
     }
 
     private void CancelScheduledSave()
     {
-        CancellationTokenSource? pending;
         lock (_saveScheduleLock)
         {
-            pending = _saveDelayCts;
+            _saveDelayCts?.Cancel();
             _saveDelayCts = null;
         }
-
-        pending?.Cancel();
     }
 
     private SettingsSnapshot CreateSnapshot() => new()

@@ -31,7 +31,7 @@ public partial class AccountEditViewModel : ViewModelBase
     public string PasswordHint => SelectedAccount is null ? "填写登录密码" : "留空则保留已保存的密码";
     public string PlatformHint => Settings.CurrentPlatform == LearningPlatformCatalog.XueXiTong
         ? "手机号或超星号登录；验证码、二次验证需在浏览器中完成。"
-        : "可先保存账号；当前智慧树仍需在浏览器中手动登录。";
+        : "手机号或用户名登录；自动勾选协议，验证码需在浏览器中手动完成。";
 
     public AccountEditViewModel(GlobalSettings settings, ILogService? logService = null)
     {

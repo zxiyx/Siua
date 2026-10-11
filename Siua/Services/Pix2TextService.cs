@@ -1,5 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
+using System;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
@@ -7,8 +6,7 @@ using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
-using System.Net.Sockets;
-using System.Runtime.InteropServices;
+using System.Net.NetworkInformation;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -188,7 +186,7 @@ public sealed class Pix2TextService : IDisposable
             if (session is null)
             {
                 // 未确认是 Pix2Text 的监听者不强行关闭，也不再启动一个竞争同一端口的进程。
-                if (GetListeningProcessIds(_settings.Pix2TextPort).Count != 0)
+                if (IsPortInUse(_settings.Pix2TextPort))
                 {
                     ErrorMessage = $"端口 {_settings.Pix2TextPort} 已被占用，且未检测到可用 Pix2Text 服务";
                     LogError(ErrorMessage);
@@ -430,143 +428,9 @@ public sealed class Pix2TextService : IDisposable
         finally { _startLock.Release(); }
     }
 
-    private static IReadOnlySet<int> GetListeningProcessIds(int port)
-    {
-        if (!OperatingSystem.IsWindows())
-            return new HashSet<int>();
-
-        var processIds = new HashSet<int>();
-        ReadIpv4Listeners(port, processIds);
-        ReadIpv6Listeners(port, processIds);
-        return processIds;
-    }
-
-    private static void ReadIpv4Listeners(int port, ISet<int> processIds)
-    {
-        var size = 0;
-        _ = GetExtendedTcpTable(
-            IntPtr.Zero,
-            ref size,
-            true,
-            (int)AddressFamily.InterNetwork,
-            TcpTableClass.OwnerPidListener,
-            0);
-        if (size <= 0)
-            return;
-
-        var buffer = Marshal.AllocHGlobal(size);
-        try
-        {
-            if (GetExtendedTcpTable(
-                    buffer,
-                    ref size,
-                    true,
-                    (int)AddressFamily.InterNetwork,
-                    TcpTableClass.OwnerPidListener,
-                    0) != 0)
-                return;
-
-            var count = Marshal.ReadInt32(buffer);
-            var rowPointer = IntPtr.Add(buffer, sizeof(uint));
-            var rowSize = Marshal.SizeOf<MibTcpRowOwnerPid>();
-            for (var index = 0; index < count; index++)
-            {
-                var row = Marshal.PtrToStructure<MibTcpRowOwnerPid>(rowPointer);
-                if (GetPort(row.LocalPort) == port)
-                    processIds.Add((int)row.OwningPid);
-                rowPointer = IntPtr.Add(rowPointer, rowSize);
-            }
-        }
-        finally
-        {
-            Marshal.FreeHGlobal(buffer);
-        }
-    }
-
-    private static void ReadIpv6Listeners(int port, ISet<int> processIds)
-    {
-        var size = 0;
-        _ = GetExtendedTcpTable(
-            IntPtr.Zero,
-            ref size,
-            true,
-            (int)AddressFamily.InterNetworkV6,
-            TcpTableClass.OwnerPidListener,
-            0);
-        if (size <= 0)
-            return;
-
-        var buffer = Marshal.AllocHGlobal(size);
-        try
-        {
-            if (GetExtendedTcpTable(
-                    buffer,
-                    ref size,
-                    true,
-                    (int)AddressFamily.InterNetworkV6,
-                    TcpTableClass.OwnerPidListener,
-                    0) != 0)
-                return;
-
-            var count = Marshal.ReadInt32(buffer);
-            var rowPointer = IntPtr.Add(buffer, sizeof(uint));
-            var rowSize = Marshal.SizeOf<MibTcp6RowOwnerPid>();
-            for (var index = 0; index < count; index++)
-            {
-                var row = Marshal.PtrToStructure<MibTcp6RowOwnerPid>(rowPointer);
-                if (GetPort(row.LocalPort) == port)
-                    processIds.Add((int)row.OwningPid);
-                rowPointer = IntPtr.Add(rowPointer, rowSize);
-            }
-        }
-        finally
-        {
-            Marshal.FreeHGlobal(buffer);
-        }
-    }
-
-    private static int GetPort(uint networkPort) =>
-        unchecked((ushort)IPAddress.NetworkToHostOrder((short)networkPort));
-
-    private enum TcpTableClass
-    {
-        OwnerPidListener = 3
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct MibTcpRowOwnerPid
-    {
-        public uint State;
-        public uint LocalAddress;
-        public uint LocalPort;
-        public uint RemoteAddress;
-        public uint RemotePort;
-        public uint OwningPid;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct MibTcp6RowOwnerPid
-    {
-        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 16)]
-        public byte[] LocalAddress;
-        public uint LocalScopeId;
-        public uint LocalPort;
-        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 16)]
-        public byte[] RemoteAddress;
-        public uint RemoteScopeId;
-        public uint RemotePort;
-        public uint State;
-        public uint OwningPid;
-    }
-
-    [DllImport("iphlpapi.dll", SetLastError = true)]
-    private static extern uint GetExtendedTcpTable(
-        IntPtr tcpTable,
-        ref int size,
-        bool order,
-        int addressFamily,
-        TcpTableClass tableClass,
-        uint reserved);
+    // 只需判断端口是否有监听者，无需手动读取 TCP 表或解析进程 ID。
+    private static bool IsPortInUse(int port) => OperatingSystem.IsWindows() &&
+        IPGlobalProperties.GetIPGlobalProperties().GetActiveTcpListeners().Any(endpoint => endpoint.Port == port);
 
     private string? ResolveExecutablePath()
     {

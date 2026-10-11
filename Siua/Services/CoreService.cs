@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.IO;
 using System.Security;
 using System.Threading;
@@ -39,6 +39,8 @@ public sealed class CoreService : ICoreService
     private int _sessionEnded;
     private int _isDisposing;
     private bool _loginInProgress;
+    // 登录恢复不能与刷课任务同时导航同一个页面。
+    private readonly SemaphoreSlim _zhsPageGate = new(1, 1);
 
     public CoreService(
         ILogService logService,
@@ -76,7 +78,7 @@ public sealed class CoreService : ICoreService
 
         _activePlatform = platform;
         _activeCourseUrl = validatedCourseUrl;
-        var autoLogin = platform == LearningPlatformCatalog.XueXiTong && _settings.Login.Enabled;
+        var autoLogin = _settings.Login.Enabled;
         var loginAccount = autoLogin ? _settings.GetSelectedLoginAccount() : null;
         if (autoLogin && loginAccount is null)
         {
@@ -100,25 +102,36 @@ public sealed class CoreService : ICoreService
                     _logService.AddLog($"[Browser] {message.Text}");
             };
 
-            await _page.GotoAsync(validatedCourseUrl, new() { WaitUntil = WaitUntilState.DOMContentLoaded });
-
-            if (IsLoginPage(_page.Url))
+            if (platform == LearningPlatformCatalog.ZhiHuiShu)
             {
-                if (loginAccount is not null)
+                await _zhsPageGate.WaitAsync(GetSessionToken());
+                try
                 {
-                    string? password = null;
-                    try { password = AccountPasswordProtector.Unprotect(loginAccount.EncryptedPassword); }
-                    catch { _logService.AddLog("已保存的密码无法读取，请重新编辑账号；本次可在浏览器中手动登录"); }
-                    if (!string.IsNullOrEmpty(password))
-                        await XxtLoginAutomation.SubmitOnceAsync(_page, loginAccount.Username, password, _logService, GetSessionToken());
+                    await ZhsLoginNavigator.OpenCourseAsync(_page, validatedCourseUrl,
+                        message => _logService.AddLog(message), GetSessionToken(),
+                        submitLogin: loginAccount is null ? null :
+                            (page, token) => SubmitSavedLoginAsync(page, platform, loginAccount, token));
                 }
-                else _logService.AddLog("检测到登录界面，请先登录");
-                _logService.AddLog("等待登录中...");
-                await _page.WaitForURLAsync(GetAuthenticatedUrlPattern(), new PageWaitForURLOptions
+                finally { _zhsPageGate.Release(); }
+            }
+            else
+            {
+                await _page.GotoAsync(validatedCourseUrl, new() { WaitUntil = WaitUntilState.DOMContentLoaded });
+
+                if (IsLoginPage(_page.Url))
                 {
-                    Timeout = 300_000,
-                    WaitUntil = WaitUntilState.DOMContentLoaded
-                }).WaitAsync(GetSessionToken());
+                    if (loginAccount is not null)
+                    {
+                        await SubmitSavedLoginAsync(_page, platform, loginAccount, GetSessionToken());
+                    }
+                    else _logService.AddLog("检测到登录界面，请先登录");
+                    _logService.AddLog("等待登录中...");
+                    await _page.WaitForURLAsync(GetAuthenticatedUrlPattern(), new PageWaitForURLOptions
+                    {
+                        Timeout = 300_000,
+                        WaitUntil = WaitUntilState.DOMContentLoaded
+                    }).WaitAsync(GetSessionToken());
+                }
             }
 
             if (!IsSessionActive || IsLoginPage(_page.Url))
@@ -127,7 +140,8 @@ public sealed class CoreService : ICoreService
                 return false;
             }
 
-            _logService.AddLog("登录成功");
+            _logService.AddLog(platform == LearningPlatformCatalog.ZhiHuiShu
+                ? "登录成功，目标课程已加载" : "登录成功");
             _loginInProgress = false;
             StartLoginHeartbeat();
             return true;
@@ -155,6 +169,19 @@ public sealed class CoreService : ICoreService
         _browser is { IsConnected: true } &&
         _page is { IsClosed: false };
 
+    private async Task SubmitSavedLoginAsync(IPage page, string platform, LoginAccount account,
+        CancellationToken cancellationToken)
+    {
+        string? password = null;
+        try { password = AccountPasswordProtector.Unprotect(account.EncryptedPassword); }
+        catch { _logService.AddLog("已保存的密码无法读取，请重新编辑账号；本次可在浏览器中手动登录"); }
+        if (string.IsNullOrEmpty(password)) return;
+        if (platform == LearningPlatformCatalog.ZhiHuiShu)
+            await ZhsLoginAutomation.SubmitOnceAsync(page, account.Username, password, _logService, cancellationToken);
+        else if (platform == LearningPlatformCatalog.XueXiTong)
+            await XxtLoginAutomation.SubmitOnceAsync(page, account.Username, password, _logService, cancellationToken);
+    }
+
     public async Task<bool> ParsePage()
     {
         return _activePlatform switch
@@ -179,9 +206,13 @@ public sealed class CoreService : ICoreService
             return false;
         }
 
+        var entered = false;
         try
         {
             var cancellationToken = GetSessionToken();
+            await _zhsPageGate.WaitAsync(cancellationToken);
+            entered = true;
+            if (!ReferenceEquals(page, _page) || !IsSessionActive) return false;
             _zhsRunner ??= new ZhsRunner(
                 page,
                 _settings,
@@ -205,6 +236,10 @@ public sealed class CoreService : ICoreService
                 LogLevel.Error,
                 "Zhs",
                 $"处理智慧树课程失败：{exception}");
+        }
+        finally
+        {
+            if (entered) _zhsPageGate.Release();
         }
 
         return false;
@@ -367,6 +402,29 @@ public sealed class CoreService : ICoreService
                     continue;
                 }
 
+                if (_activePlatform == LearningPlatformCatalog.ZhiHuiShu)
+                {
+                    if (!await _zhsPageGate.WaitAsync(0, cancellationToken))
+                    {
+                        _logService.AddLog("智慧树登录态失效，请完成登录后重新启动任务；当前任务执行中不自动跳转页面");
+                        continue;
+                    }
+                    try
+                    {
+                        if (!ReferenceEquals(page, _page)) continue;
+                        _loginInProgress = true;
+                        await ZhsLoginNavigator.OpenCourseAsync(page, GetCourseUrl(),
+                            message => _logService.AddLog(message), cancellationToken);
+                        _logService.AddLog("智慧树登录验证通过，目标课程已重新加载，请重新启动任务");
+                    }
+                    finally
+                    {
+                        if (ReferenceEquals(page, _page)) _loginInProgress = false;
+                        _zhsPageGate.Release();
+                    }
+                    continue;
+                }
+
                 _logService.AddLog("检测到登录态失效，尝试恢复...");
                 await page.GotoAsync(GetCourseUrl());
                 await page.WaitForLoadStateAsync(LoadState.Load, new PageWaitForLoadStateOptions
@@ -401,7 +459,7 @@ public sealed class CoreService : ICoreService
             LearningPlatformCatalog.XueXiTong =>
                 url.Contains(PassportUrlFragment, StringComparison.OrdinalIgnoreCase),
             LearningPlatformCatalog.ZhiHuiShu =>
-                url.Contains("login", StringComparison.OrdinalIgnoreCase),
+                ZhsLoginNavigator.IsAuthenticationPage(url),
             _ => false
         };
     }
@@ -412,13 +470,14 @@ public sealed class CoreService : ICoreService
         {
             LearningPlatformCatalog.XueXiTong => "**/mooc1.chaoxing.com/**",
             //LearningPlatformCatalog.XueXiTong => "**/{mooc1,mooc2-ans}.chaoxing.com/**",
-            LearningPlatformCatalog.ZhiHuiShu => "**/wisdom-mooc.zhihuishu.com/**",
             _ => throw new InvalidOperationException("当前任务没有有效的平台适配器。")
         };
     }
 
     private bool RequiresLoginRecovery(string url)
     {
+        if (_activePlatform == LearningPlatformCatalog.ZhiHuiShu)
+            return ZhsLoginNavigator.IsAuthenticationPage(url) || ZhsLoginNavigator.IsPersonalCoursePage(url);
         return IsLoginPage(url) ||
                (string.Equals(_activePlatform, LearningPlatformCatalog.XueXiTong, StringComparison.Ordinal) &&
                 string.Equals(url, "https://i.chaoxing.com/base", StringComparison.OrdinalIgnoreCase));

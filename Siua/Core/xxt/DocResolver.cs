@@ -43,8 +43,9 @@ public sealed class XxtDocumentResolver
         await locator.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Attached });
         var element = await locator.ElementHandleAsync()
             ?? throw new PlaywrightException("无法获取附件 iframe 元素。");
-        var frame = await element.ContentFrameAsync()
-            ?? throw new PlaywrightException("无法进入附件 iframe。");
+        IFrame frame;
+        try { frame = await element.ContentFrameAsync() ?? throw new PlaywrightException("无法进入附件 iframe。"); }
+        finally { await element.DisposeAsync(); }
         await XxtPageResolver.WaitForFrameContentAsync(frame, locator);
         return frame;
     }

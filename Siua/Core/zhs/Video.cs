@@ -111,18 +111,16 @@ public sealed class ZhsVideo
         if (element is null)
             return null;
 
-        var property = await element.GetPropertyAsync(propertyName);
         try
         {
-            return await property.JsonValueAsync<T>();
-        }
-        catch (PlaywrightException)
-        {
-            return null;
+            var property = await element.GetPropertyAsync(propertyName);
+            try { return await property.JsonValueAsync<T>(); }
+            catch (PlaywrightException) { return null; }
+            finally { await property.DisposeAsync(); }
         }
         finally
         {
-            await property.DisposeAsync();
+            await element.DisposeAsync();
         }
     }
 }
