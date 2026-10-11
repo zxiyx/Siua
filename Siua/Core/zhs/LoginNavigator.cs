@@ -21,7 +21,11 @@ public static class ZhsLoginNavigator
     }
 
     public static bool IsPersonalCoursePage(string url) => TryParse(url, out var uri) &&
-        uri.Host.Equals("onlineweb.zhihuishu.com", StringComparison.OrdinalIgnoreCase);
+        (uri.Host.Equals("onlineweb.zhihuishu.com", StringComparison.OrdinalIgnoreCase) || IsHikeCourseCenter(url));
+
+    private static bool IsHikeCourseCenter(string url) => TryParse(url, out var uri) &&
+        uri.Host.Equals("hike-teaching-center.polymas.com", StringComparison.OrdinalIgnoreCase) &&
+        uri.AbsolutePath.TrimEnd('/').Equals("/stu-hike/agent-course-hike/ai-course-center", StringComparison.OrdinalIgnoreCase);
 
     public static bool IsTargetCourse(string url, string courseUrl)
     {
@@ -41,7 +45,7 @@ public static class ZhsLoginNavigator
         return true;
     }
 
-    public static async Task OpenCourseAsync(IPage page, string courseUrl, Action<string> log,
+    public static async Task<IPage> OpenCourseAsync(IPage page, string courseUrl, Action<string> log,
         CancellationToken cancellationToken = default, int loginTimeoutMilliseconds = 300_000,
         int courseTimeoutMilliseconds = 30_000,
         Func<IPage, CancellationToken, Task>? submitLogin = null)
@@ -62,6 +66,9 @@ public static class ZhsLoginNavigator
         var readySince = -1L;
         var landingSince = -1L;
         var lastUrl = "";
+        var context = page.Context;
+        var existingPages = new HashSet<IPage>(context.Pages);
+        var loggedCourseCenter = false;
         Exception? lastNavigationError = null;
 
         async Task NavigateToCourseAsync()
@@ -86,6 +93,19 @@ public static class ZhsLoginNavigator
             while (true)
             {
                 token.ThrowIfCancellationRequested();
+                // 课程中心通过新标签页打开课程，不能一直等待原登录页跳转。
+                foreach (var candidate in context.Pages)
+                {
+                    if (candidate == page || existingPages.Contains(candidate) || candidate.IsClosed ||
+                        !IsTargetCourse(candidate.Url, courseUrl)) continue;
+                    if (!await IsCatalogReadyAsync(candidate, target, token)) continue;
+                    existingPages.UnionWith(context.Pages);
+                    page = candidate;
+                    courseStarted = timer.ElapsedMilliseconds;
+                    readySince = landingSince = -1;
+                    log("检测到新打开的目标课程页面，正在确认章节目录...");
+                    break;
+                }
                 if (page.IsClosed) throw new InvalidOperationException("等待智慧树登录时浏览器页面已关闭。");
                 var url = page.Url;
                 if (url != lastUrl)
@@ -113,7 +133,17 @@ public static class ZhsLoginNavigator
                 else
                 {
                     if (waitingForLogin) { courseStarted = timer.ElapsedMilliseconds; waitingForLogin = false; }
-                    if (IsPersonalCoursePage(url))
+                    if (IsHikeCourseCenter(url))
+                    {
+                        if (!loggedCourseCenter)
+                        {
+                            log("已到达课程中心，请点击本次任务对应的课程；新打开的学习页面将自动接管。");
+                            loggedCourseCenter = true;
+                        }
+                        // 这里需要课程中心发起课程跳转，保留页面等待用户点击；仍受总超时约束。
+                        courseStarted = timer.ElapsedMilliseconds;
+                    }
+                    else if (IsPersonalCoursePage(url))
                     {
                         if (landingSince < 0) landingSince = timer.ElapsedMilliseconds;
                         if (!returnedFromPersonalPage && timer.ElapsedMilliseconds - landingSince >= 500 &&
@@ -130,7 +160,7 @@ public static class ZhsLoginNavigator
                     {
                         if (readySince < 0) readySince = timer.ElapsedMilliseconds;
                         if (timer.ElapsedMilliseconds - readySince >= 1_000 && IsTargetCourse(page.Url, courseUrl))
-                            return;
+                            return page;
                     }
                     else readySince = -1;
 

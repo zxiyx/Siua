@@ -21,7 +21,7 @@ public partial class MainViewModel : ViewModelBase
     public ISukiDialogManager DialogManager { get; }
     public ISukiToastManager ToastManager { get; }
     
-    [ObservableProperty] private string _siuaVersion = "Siua v1.1.5";
+    [ObservableProperty] private string _siuaVersion = "Siua v1.1.6";
     [ObservableProperty] private PageBase? _activePage;
     
     private readonly ILogService _log;

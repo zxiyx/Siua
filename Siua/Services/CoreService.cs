@@ -95,22 +95,17 @@ public sealed class CoreService : ICoreService
             _page = await _browser.NewPageAsync();
             RegisterSessionEvents(_browser, _page, _sessionCts);
             _loginInProgress = true;
-            _page.Console += (_, message) =>
-            {
-                // 登录页的第三方脚本可能打印凭据，登录期间不转发浏览器控制台。
-                if (!_loginInProgress && _page is { } page && !IsLoginPage(page.Url))
-                    _logService.AddLog($"[Browser] {message.Text}");
-            };
 
             if (platform == LearningPlatformCatalog.ZhiHuiShu)
             {
                 await _zhsPageGate.WaitAsync(GetSessionToken());
                 try
                 {
-                    await ZhsLoginNavigator.OpenCourseAsync(_page, validatedCourseUrl,
+                    var coursePage = await ZhsLoginNavigator.OpenCourseAsync(_page, validatedCourseUrl,
                         message => _logService.AddLog(message), GetSessionToken(),
                         submitLogin: loginAccount is null ? null :
                             (page, token) => SubmitSavedLoginAsync(page, platform, loginAccount, token));
+                    AdoptCoursePage(coursePage);
                 }
                 finally { _zhsPageGate.Release(); }
             }
@@ -337,10 +332,37 @@ public sealed class CoreService : ICoreService
     {
         browser.Disconnected += (_, _) =>
             HandleSessionEnded(session, "检测到浏览器已关闭，当前任务已终止");
+        RegisterPageEvents(page, session);
+    }
+
+    private void AdoptCoursePage(IPage page)
+    {
+        if (ReferenceEquals(_page, page)) return;
+        _page = page;
+        _zhsRunner = null; // 任务执行器持有页面引用，接管后必须在新页面上重建。
+        RegisterPageEvents(page, _sessionCts!);
+    }
+
+    private void RegisterPageEvents(IPage page, CancellationTokenSource session)
+    {
         page.Close += (_, _) =>
-            HandleSessionEnded(session, "检测到课程页面已关闭，当前任务已终止");
+        {
+            if (ReferenceEquals(_page, page) &&
+                (!_loginInProgress || _activePlatform != LearningPlatformCatalog.ZhiHuiShu))
+                HandleSessionEnded(session, "检测到课程页面已关闭，当前任务已终止");
+        };
         page.Crash += (_, _) =>
-            HandleSessionEnded(session, "检测到课程页面崩溃，当前任务已终止");
+        {
+            if (ReferenceEquals(_page, page))
+                HandleSessionEnded(session, "检测到课程页面崩溃，当前任务已终止");
+        };
+        page.Console += (_, message) =>
+        {
+            // 仅记录当前课程页；登录期间不转发可能包含凭据的控制台输出。
+            if (ReferenceEquals(_sessionCts, session) && ReferenceEquals(_page, page) &&
+                !_loginInProgress && !IsLoginPage(page.Url))
+                _logService.AddLog($"[Browser] {message.Text}");
+        };
     }
 
     private void HandleSessionEnded(string reason)
@@ -413,13 +435,14 @@ public sealed class CoreService : ICoreService
                     {
                         if (!ReferenceEquals(page, _page)) continue;
                         _loginInProgress = true;
-                        await ZhsLoginNavigator.OpenCourseAsync(page, GetCourseUrl(),
+                        var coursePage = await ZhsLoginNavigator.OpenCourseAsync(page, GetCourseUrl(),
                             message => _logService.AddLog(message), cancellationToken);
+                        AdoptCoursePage(coursePage);
                         _logService.AddLog("智慧树登录验证通过，目标课程已重新加载，请重新启动任务");
                     }
                     finally
                     {
-                        if (ReferenceEquals(page, _page)) _loginInProgress = false;
+                        _loginInProgress = false;
                         _zhsPageGate.Release();
                     }
                     continue;

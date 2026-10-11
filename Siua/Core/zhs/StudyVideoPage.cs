@@ -13,12 +13,13 @@ public sealed class ZhsStudyVideoPage(IPage page)
 
     public async Task CloseStudyPopupsAsync(CancellationToken cancellationToken = default)
     {
-        // 只关闭这两种学习提示，不能关闭提交确认或成绩窗口。
+        // 弹题必须先作答才能关闭；不处理考试提交确认或成绩窗口。
         for (var pass = 0; pass < 3; pass++)
         {
             cancellationToken.ThrowIfCancellationRequested();
             var closed = false;
             var pending = false;
+            Exception? lastFailure = null;
             foreach (var selector in new[] { ".dialog-read", "#playTopic-dialog" })
             {
                 var dialog = page.Locator(selector).First;
@@ -28,16 +29,61 @@ public sealed class ZhsStudyVideoPage(IPage page)
                 var close = dialog.Locator(selector == ".dialog-read"
                     ? ".iconguanbi" : ".dialog-footer .btn, button[aria-label='Close']").Last;
                 // 两个弹窗可能叠在一起；被挡住时先尝试另一个关闭按钮。
-                try { await close.ClickAsync(new LocatorClickOptions { Timeout = 1_000 }); }
-                catch (TimeoutException) { continue; }
+                try
+                {
+                    if (selector == "#playTopic-dialog")
+                        await AnswerVideoQuizAsync(dialog, cancellationToken);
+                    await close.ClickAsync(new LocatorClickOptions { Timeout = 1_000 });
+                }
+                catch (TimeoutException exception) { lastFailure = exception; continue; }
                 await dialog.WaitForAsync(new LocatorWaitForOptions
-                { State = WaitForSelectorState.Hidden, Timeout = 5_000 });
+                { State = WaitForSelectorState.Hidden, Timeout = 5_000 }).WaitAsync(cancellationToken);
                 closed = true;
             }
             if (!pending) return;
             if (!closed)
-                throw new InvalidOperationException("智慧树学习提示窗口无法关闭，请检查页面提示。");
+                throw new InvalidOperationException("智慧树学习提示窗口无法处理，请检查弹题作答状态或页面提示。", lastFailure);
         }
+    }
+
+    private static async Task AnswerVideoQuizAsync(ILocator dialog, CancellationToken token)
+    {
+        var question = dialog.Locator(".topic:visible").First;
+        await question.WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = 5_000 }).WaitAsync(token);
+        var options = question.Locator(".topic-list .topic-item:visible");
+        if (await options.CountAsync() == 0)
+            throw new InvalidOperationException("智慧树视频弹题未找到可选答案，已停止，请手动作答。");
+
+        // 平台点击选项即作答，不调用章节测试的提交或 AI 流程。
+        var selected = question.Locator(".topic-option-item.active");
+        if (await selected.CountAsync() == 0)
+        {
+            await options.First.ClickAsync(new() { Timeout = 1_000 }).WaitAsync(token);
+            await selected.First.WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = 5_000 }).WaitAsync(token);
+            // 选中样式先更新、答案反馈随后到达，留出反馈时间。
+            await Task.Delay(500, token);
+        }
+
+        var hint = question.Locator("p.answer:visible span").First;
+        if (await hint.CountAsync() == 0) return;
+        var answer = (await hint.InnerTextAsync().WaitAsync(token)).Trim().TrimEnd('.', '．', '、').ToUpperInvariant();
+        if (answer.Length != 1 || answer[0] < 'A' || answer[0] > 'Z')
+            return; // 当前样本为单选；其他格式仍可在已作答后关闭。
+        for (var i = 0; i < await options.CountAsync(); i++)
+        {
+            var option = options.Nth(i);
+            var marker = option.Locator(".topic-option-item");
+            if ((await marker.InnerTextAsync().WaitAsync(token)).Trim().TrimEnd('.', '．', '、').ToUpperInvariant() != answer)
+                continue;
+            if (await option.Locator(".topic-option-item.active").CountAsync() == 0)
+            {
+                await option.ClickAsync(new() { Timeout = 1_000 }).WaitAsync(token);
+                await option.Locator(".topic-option-item.active").WaitForAsync(
+                    new() { State = WaitForSelectorState.Visible, Timeout = 5_000 }).WaitAsync(token);
+            }
+            return;
+        }
+        throw new InvalidOperationException("智慧树视频弹题的正确答案与可选项不匹配，请手动作答。");
     }
 
     public async Task PauseAsync()
