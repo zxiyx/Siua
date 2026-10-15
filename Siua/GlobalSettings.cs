@@ -20,7 +20,7 @@ public partial class GlobalSettings : ObservableObject, IDisposable
     private const int SaveDelayMilliseconds = 750;
 
     private readonly object _saveScheduleLock = new();
-    private readonly SettingsStorage _storage;
+    private readonly SettingsStorageService _storage;
     private readonly Dictionary<string, ObservableCollection<string>> _coursesByPlatform =
         new(StringComparer.Ordinal);
     private readonly Dictionary<string, LoginPreferences> _loginByPlatform = new(StringComparer.Ordinal);
@@ -60,7 +60,7 @@ public partial class GlobalSettings : ObservableObject, IDisposable
 
     public GlobalSettings(string? storageDirectory = null)
     {
-        _storage = new SettingsStorage(storageDirectory);
+        _storage = new SettingsStorageService(storageDirectory);
         UserDataDir = Path.Combine(_storage.StorageDirectory, "UserData");
         Directory.CreateDirectory(UserDataDir);
         _coursesByPlatform[CurrentPlatform] = Courses;

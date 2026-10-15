@@ -7,7 +7,7 @@ using System.Threading.Tasks;
 namespace Siua.Services;
 
 /// <summary>只保留启动期的有限输出；就绪后清空并丢弃输出，避免记录 OCR 正文。</summary>
-internal sealed class Pix2TextProcess : IDisposable
+internal sealed class Pix2TextProcessService : IDisposable
 {
     private readonly Process _process;
     private readonly object _sync = new();
@@ -18,7 +18,7 @@ internal sealed class Pix2TextProcess : IDisposable
     private Task _output = Task.CompletedTask;
     private Task _error = Task.CompletedTask;
 
-    public Pix2TextProcess(Process process, string executable)
+    public Pix2TextProcessService(Process process, string executable)
     {
         _process = process;
         Executable = executable;

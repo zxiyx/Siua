@@ -7,7 +7,7 @@ using Siua.Interfaces;
 namespace Siua.Services;
 
 /// <summary>仅向受信任的学习通密码登录页提交一次；验证和失败重试交给用户。</summary>
-internal static class XxtLoginAutomation
+internal static class XxtLoginService
 {
     internal static bool IsTrustedLoginUrl(string url) => Uri.TryCreate(url, UriKind.Absolute, out var uri) &&
         uri.Scheme == Uri.UriSchemeHttps && uri.IsDefaultPort &&

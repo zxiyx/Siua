@@ -26,7 +26,7 @@ public sealed class Pix2TextService : IDisposable
     private readonly ILogService _logService;
     private readonly SemaphoreSlim _startLock = new(1, 1);
     private readonly HttpClient _httpClient;
-    private Pix2TextProcess? _process;
+    private Pix2TextProcessService? _process;
     private readonly object _operationSync = new();
     private CancellationTokenSource? _activeOperation;
     private readonly Func<ProcessStartInfo, Process> _processFactory;
@@ -156,7 +156,7 @@ public sealed class Pix2TextService : IDisposable
     {
         await _startLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         using var operation = BeginOperation(cancellationToken);
-        Pix2TextProcess? session = null;
+        Pix2TextProcessService? session = null;
         try
         {
             cancellationToken = operation.Token;
@@ -208,7 +208,7 @@ public sealed class Pix2TextService : IDisposable
                 }
                 var info = CreatePythonStartInfo(pythonExecutable);
                 AddProcessArguments(info, listenAddress, _settings.Pix2TextPort);
-                session = new Pix2TextProcess(_processFactory(info), pythonExecutable);
+                session = new Pix2TextProcessService(_processFactory(info), pythonExecutable);
                 _process = session;
                 var owned = session;
                 session.Start(() =>
@@ -472,7 +472,7 @@ public sealed class Pix2TextService : IDisposable
         info.ArgumentList.Add("utf8");
         info.ArgumentList.Add("-c");
         info.ArgumentList.Add("import fastapi, uvicorn, multipart, pix2text.serve");
-        using var session = new Pix2TextProcess(_processFactory(info), python);
+        using var session = new Pix2TextProcessService(_processFactory(info), python);
         try
         {
             session.Start(() => { });

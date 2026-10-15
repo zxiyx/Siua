@@ -5,7 +5,7 @@ using System.Text;
 namespace Siua.Services;
 
 /// <summary>密码绑定当前 Windows 用户，不在配置文件中保存明文。</summary>
-public static class AccountPasswordProtector
+public static class AccountPasswordService
 {
     private static readonly byte[] Entropy = Encoding.UTF8.GetBytes("Siua.LoginAccount.v1");
 

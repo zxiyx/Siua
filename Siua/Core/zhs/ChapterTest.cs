@@ -42,6 +42,13 @@ public sealed class ZhsChapterTest
     public async Task<bool> IsAvailableAsync() =>
         await _locator.CountAsync() > 0 && await _locator.IsVisibleAsync();
 
+    public async Task<bool> IsCompletedAsync(CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        // 新版目录在已完成的平时测试按钮内插入空 b 标签；不套用到旧版页面。
+        return IsStudyVideo && await _locator.Locator("b.finish").CountAsync() > 0;
+    }
+
     public async Task<IPage> OpenAsync(
         IPage coursePage,
         CancellationToken cancellationToken = default)

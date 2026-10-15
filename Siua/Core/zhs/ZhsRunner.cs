@@ -191,6 +191,11 @@ public sealed class ZhsRunner
         var succeeded = false;
         try
         {
+            if (_settings.JumpCompleted && await chapterTest.IsCompletedAsync(cancellationToken))
+            {
+                LogInfo("该平时测试已完成，跳过测试");
+                return true;
+            }
             LogInfo("进入智慧树章节测试...");
             if (chapterTest.IsStudyVideo)
             {

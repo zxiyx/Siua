@@ -12,13 +12,13 @@ using Siua.Common;
 namespace Siua.Services;
 
 /// <summary>负责应用设置文件的读取、写入与恢复。</summary>
-internal sealed class SettingsStorage
+internal sealed class SettingsStorageService
 {
     private const string SettingsFileName = "settings.json";
     private const string ApplicationDirectoryName = "Siua";
     private readonly SemaphoreSlim _writeLock = new(1, 1);
 
-    public SettingsStorage(string? storageDirectory)
+    public SettingsStorageService(string? storageDirectory)
     {
         StorageDirectory = string.IsNullOrWhiteSpace(storageDirectory)
             ? GetDefaultStorageDirectory()

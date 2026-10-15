@@ -70,10 +70,10 @@ public  partial class App : Application
         });
         services.AddSingleton<Pix2TextService>();
         services.AddSingleton<AiControlService>();
-        services.AddSingleton<ApiConnectionTester>();
+        services.AddSingleton<ApiConnectionService>();
         services.AddSingleton<ILogService,LogService>();
         services.AddSingleton<ICoreService,CoreService>();
-        services.AddSingleton<IShowWindowManager, ShowWindowManager>();
+        services.AddSingleton<IShowWindowManager, ShowWindowService>();
         services.AddSingleton<ISukiToastManager, SukiToastManager>();
         services.AddSingleton<ISukiDialogManager, SukiDialogManager>();
         return services.BuildServiceProvider();

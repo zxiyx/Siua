@@ -10,13 +10,13 @@ namespace Siua.Services;
 public sealed record ApiConnectionResult(bool IsReachable, bool IsSuccess, string Message, long ElapsedMilliseconds = 0);
 
 /// <summary>探测配置地址的 HTTP 可达性；任何响应均算连通，不验证密钥或模型。</summary>
-public sealed class ApiConnectionTester : IDisposable
+public sealed class ApiConnectionService : IDisposable
 {
     private const int TimeoutSeconds = 8;
     private const int MaxRetries = 1;
     private readonly HttpClient _client;
 
-    public ApiConnectionTester(HttpMessageHandler? handler = null)
+    public ApiConnectionService(HttpMessageHandler? handler = null)
     {
         _client = new HttpClient(handler ?? new HttpClientHandler { AllowAutoRedirect = false })
         {

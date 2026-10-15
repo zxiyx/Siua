@@ -168,13 +168,13 @@ public sealed class CoreService : ICoreService
         CancellationToken cancellationToken)
     {
         string? password = null;
-        try { password = AccountPasswordProtector.Unprotect(account.EncryptedPassword); }
+        try { password = AccountPasswordService.Unprotect(account.EncryptedPassword); }
         catch { _logService.AddLog("已保存的密码无法读取，请重新编辑账号；本次可在浏览器中手动登录"); }
         if (string.IsNullOrEmpty(password)) return;
         if (platform == LearningPlatformCatalog.ZhiHuiShu)
-            await ZhsLoginAutomation.SubmitOnceAsync(page, account.Username, password, _logService, cancellationToken);
+            await ZhsLoginService.SubmitOnceAsync(page, account.Username, password, _logService, cancellationToken);
         else if (platform == LearningPlatformCatalog.XueXiTong)
-            await XxtLoginAutomation.SubmitOnceAsync(page, account.Username, password, _logService, cancellationToken);
+            await XxtLoginService.SubmitOnceAsync(page, account.Username, password, _logService, cancellationToken);
     }
 
     public async Task<bool> ParsePage()

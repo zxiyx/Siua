@@ -109,7 +109,7 @@ public partial class AccountEditViewModel : ViewModelBase
         try
         {
             var encryptedPassword = password.Length > 0
-                ? AccountPasswordProtector.Protect(password) : selected!.EncryptedPassword;
+                ? AccountPasswordService.Protect(password) : selected!.EncryptedPassword;
             stage = "账号保存";
             var account = new LoginAccount
             {

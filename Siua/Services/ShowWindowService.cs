@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Threading.Tasks;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
@@ -8,12 +8,12 @@ using Siua.Interfaces;
 namespace Siua.Services;
 
 /// <summary>负责显示应用窗口与对话内容。</summary>
-public class ShowWindowManager:IShowWindowManager
+public class ShowWindowService:IShowWindowManager
 {
     private readonly IServiceProvider _serviceProvider;
     private readonly IClassicDesktopStyleApplicationLifetime _desktop;
 
-    public ShowWindowManager(IServiceProvider serviceProvider,IClassicDesktopStyleApplicationLifetime desktop)
+    public ShowWindowService(IServiceProvider serviceProvider,IClassicDesktopStyleApplicationLifetime desktop)
     {
         _serviceProvider = serviceProvider;
         _desktop = desktop;

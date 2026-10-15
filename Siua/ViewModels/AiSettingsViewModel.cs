@@ -15,7 +15,7 @@ namespace Siua.ViewModels;
 public partial class AiSettingsViewModel:ObservableObject
 {
     public Action? RequestClose;
-    private readonly ApiConnectionTester _connectionTester;
+    private readonly ApiConnectionService _connectionTester;
     private CancellationTokenSource? _connectionTestCancellation;
     [ObservableProperty] private bool _isTestingConnection;
     [ObservableProperty] private bool _isConnectionInfoOpen;
@@ -31,7 +31,7 @@ public partial class AiSettingsViewModel:ObservableObject
     
     [ObservableProperty]
     private  GlobalSettings _settings;
-    public AiSettingsViewModel(GlobalSettings globalSettings, ApiConnectionTester connectionTester)
+    public AiSettingsViewModel(GlobalSettings globalSettings, ApiConnectionService connectionTester)
     {
         _connectionTester = connectionTester;
         _settings = globalSettings;

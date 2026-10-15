@@ -7,7 +7,7 @@ using Siua.Interfaces;
 namespace Siua.Services;
 
 /// <summary>智慧树账号登录只提交一次，验证码和登录失败交给用户手动处理。</summary>
-internal static class ZhsLoginAutomation
+internal static class ZhsLoginService
 {
     internal static bool IsTrustedLoginUrl(string url) => Uri.TryCreate(url, UriKind.Absolute, out var uri) &&
         uri.Scheme == Uri.UriSchemeHttps && uri.IsDefaultPort &&
