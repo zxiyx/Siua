@@ -20,15 +20,19 @@ public sealed class ZhsStudyVideoPage(IPage page)
             var closed = false;
             var pending = false;
             Exception? lastFailure = null;
-            foreach (var selector in new[] { ".dialog-read", "#playTopic-dialog" })
+            foreach (var (selector, closeSelector) in new[]
+            {
+                (".dialog-warn", ".talk-later-btn"),
+                (".dialog-read", ".iconguanbi"),
+                ("#playTopic-dialog", ".dialog-footer .btn, button[aria-label='Close']")
+            })
             {
                 var dialog = page.Locator(selector).First;
                 if (await dialog.CountAsync() == 0 || !await dialog.IsVisibleAsync())
                     continue;
                 pending = true;
-                var close = dialog.Locator(selector == ".dialog-read"
-                    ? ".iconguanbi" : ".dialog-footer .btn, button[aria-label='Close']").Last;
-                // 两个弹窗可能叠在一起；被挡住时先尝试另一个关闭按钮。
+                var close = dialog.Locator(closeSelector).Last;
+                // 学习提示可能叠在一起；被挡住时先尝试另一个关闭按钮。
                 try
                 {
                     if (selector == "#playTopic-dialog")
