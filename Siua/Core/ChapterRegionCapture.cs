@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
@@ -9,7 +10,8 @@ namespace Siua.Core;
 internal static class ChapterRegionCapture
 {
     public static async Task<byte[]> CaptureAsync(IFrame frame, ILocator region,
-        CancellationToken cancellationToken, string? revealQuestions = null)
+        CancellationToken cancellationToken, string? revealQuestions = null,
+        Func<Task>? beforeScreenshot = null)
     {
         var states = new List<IJSHandle>();
         try
@@ -38,6 +40,9 @@ internal static class ChapterRegionCapture
                     return saved;
                 }
                 """, revealQuestions));
+
+            cancellationToken.ThrowIfCancellationRequested();
+            if (beforeScreenshot is not null) await beforeScreenshot();
 
             for (var current = frame; current.ParentFrame is not null; current = current.ParentFrame)
             {

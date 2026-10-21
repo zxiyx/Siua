@@ -121,7 +121,7 @@ public sealed class ZhsChapterTest
             Timeout = 15_000
         });
 
-        var question = new ZhsQuestion(container);
+        var question = new ZhsQuestion(container, IsStudyVideo);
         await question.LoadAsync(cancellationToken);
         return question;
     }
@@ -134,7 +134,7 @@ public sealed class ZhsChapterTest
         var questions = new List<ZhsQuestion>(count);
         for (var index = 0; index < count; index++)
         {
-            var question = new ZhsQuestion(containers.Nth(index));
+            var question = new ZhsQuestion(containers.Nth(index), IsStudyVideo);
             await question.WaitForContentAsync(cancellationToken);
             await question.LoadAsync(cancellationToken);
             questions.Add(question);
@@ -145,13 +145,16 @@ public sealed class ZhsChapterTest
     public async Task<byte[]> CaptureRegionAsync(IPage examPage, int questionCount,
         CancellationToken cancellationToken = default)
     {
-        foreach (var container in await examPage.Locator(QuestionSelector).AllAsync())
-            await new ZhsQuestion(container).WaitForContentAsync(cancellationToken);
         // 最近的共同祖先包含全卷题目，避免只截到当前分页中可见的一题。
         var region = examPage.Locator(QuestionSelector).First.Locator(
             "xpath=ancestor::*[count(.//div[contains(concat(' ', normalize-space(@class), ' '), ' examPaper_subject ') " +
             $"and contains(concat(' ', normalize-space(@class), ' '), ' mt20 ')]) = {questionCount}][1]");
-        return await ChapterRegionCapture.CaptureAsync(examPage.MainFrame, region, cancellationToken, QuestionSelector);
+        return await ChapterRegionCapture.CaptureAsync(examPage.MainFrame, region, cancellationToken,
+            QuestionSelector, async () =>
+            {
+                foreach (var container in await examPage.Locator(QuestionSelector).AllAsync())
+                    await new ZhsQuestion(container, IsStudyVideo).WaitForContentAsync(cancellationToken, forScreenshot: true);
+            });
     }
 
     public async Task<bool> MoveNextOrSaveAsync(
@@ -171,7 +174,7 @@ public sealed class ZhsChapterTest
 
         var saveButton = switchBox.Locator("button").Filter(
             new LocatorFilterOptions { HasTextRegex = SaveButtonText });
-        if (await saveButton.CountAsync() > 0 && await saveButton.First.IsVisibleAsync())
+        if (!IsStudyVideo && await saveButton.CountAsync() > 0 && await saveButton.First.IsVisibleAsync())
         {
             await saveButton.First.ClickAsync();
             await Task.Delay(500, cancellationToken);
@@ -186,7 +189,7 @@ public sealed class ZhsChapterTest
             await Task.Delay(500, cancellationToken);
             if (await nextButton.CountAsync() == 0 || !await nextButton.First.IsVisibleAsync())
             {
-                var last = new ZhsQuestion(examPage.Locator(QuestionSelector).Last);
+                var last = new ZhsQuestion(examPage.Locator(QuestionSelector).Last, IsStudyVideo);
                 await last.LoadAsync(cancellationToken);
                 var current = await LoadCurrentQuestionAsync(examPage, cancellationToken);
                 if (IsStudyVideo && isLastQuestion && last.Key == previousQuestionKey && current.Key == last.Key)
@@ -346,11 +349,13 @@ public sealed class ZhsChapterTest
 public sealed class ZhsQuestion
 {
     private readonly ILocator _container;
+    private readonly bool _studyVideo;
     private readonly List<ZhsAnswerOption> _answers = [];
 
-    public ZhsQuestion(ILocator container)
+    public ZhsQuestion(ILocator container, bool studyVideo = false)
     {
         _container = container;
+        _studyVideo = studyVideo;
     }
 
     public string Key { get; private set; } = string.Empty;
@@ -369,7 +374,7 @@ public sealed class ZhsQuestion
         Number = ZhsChapterTest.NormalizeText(
             await ZhsChapterTest.TryGetInnerTextAsync(number) ?? string.Empty);
         Key = await number.GetAttributeAsync("id") ?? Number;
-        Type = ZhsChapterTest.NormalizeText(
+        Type = _studyVideo ? string.Empty : ZhsChapterTest.NormalizeText(
             await ZhsChapterTest.TryGetInnerTextAsync(
                 _container.Locator("span.subject_type").First) ?? string.Empty);
         AllowsMultipleAnswers = Type.Contains("多选", StringComparison.Ordinal);
@@ -382,7 +387,7 @@ public sealed class ZhsQuestion
         {
             cancellationToken.ThrowIfCancellationRequested();
             var snapshot = await optionRows.EvaluateAllAsync<string>(
-                "rows => JSON.stringify(rows.map(r => [r.textContent, r.querySelector('input')?.value]))");
+                "(rows, controlsOnly) => JSON.stringify(rows.map(r => [controlsOnly ? null : r.textContent, r.querySelector('input')?.value]))", _studyVideo);
             if (snapshot != "[]" && snapshot == previousOptions && ++stableSamples >= 2)
                 break;
             if (snapshot != previousOptions) stableSamples = 0;
@@ -399,7 +404,7 @@ public sealed class ZhsQuestion
             var marker = ZhsChapterTest.NormalizeText(
                 await ZhsChapterTest.TryGetInnerTextAsync(
                     row.Locator("span.ABCase, .label span.mr10").First) ?? string.Empty).TrimEnd('.', '、', '．');
-            var text = ZhsChapterTest.NormalizeText(
+            var text = _studyVideo ? string.Empty : ZhsChapterTest.NormalizeText(
                 await ZhsChapterTest.TryGetInnerTextAsync(
                     row.Locator("div.examquestions-answer").First) ?? string.Empty);
             var input = row.Locator("input[type=radio], input[type=checkbox]").First;
@@ -415,24 +420,48 @@ public sealed class ZhsQuestion
         }
     }
 
-    public async Task WaitForContentAsync(CancellationToken cancellationToken = default)
+    public async Task WaitForContentAsync(CancellationToken cancellationToken = default, bool forScreenshot = false)
     {
-        // 某些题干由异步组件生成，HTML 空壳不能直接送给模型。
+        // 特殊渲染的题干可能没有 DOM 文字。加载时只核对结构，截图时才要求可见且布局稳定。
+        var number = string.IsNullOrEmpty(Number)
+            ? await ZhsChapterTest.TryGetInnerTextAsync(_container.Locator(".subject_num span").First) ?? "未知"
+            : Number;
+        string? previous = null;
         for (var attempt = 0; attempt < 40; attempt++)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (await _container.EvaluateAsync<bool>("""
-                q => {
-                    const stem = q.querySelector('.subject_describe');
-                    if (!stem) return true; // 兼容旧版题干结构
-                    const images = [...stem.querySelectorAll('img')];
-                    return (!!stem.textContent.trim() || images.length > 0 || !!stem.querySelector('canvas, svg')) &&
-                        images.every(i => i.complete && i.naturalWidth > 0);
+            var snapshot = await _container.EvaluateAsync<string?>("""
+                (q, args) => {
+                    const stem = q.querySelector('.subject_describe') ||
+                        (!args.studyVideo ? q.querySelector('.subject_stem') || q : null);
+                    const options = q.querySelector('.subject_node');
+                    const rows = options ? [...options.querySelectorAll('.nodeLab')] : [];
+                    if (!stem || !options || !rows.length ||
+                        rows.some(row => !row.querySelector('input[type=radio],input[type=checkbox]'))) return null;
+                    const ids = rows.map(row => row.querySelector('input').value);
+                    if (!args.forScreenshot) return JSON.stringify(ids);
+
+                    const visible = node => {
+                        const rect = node.getBoundingClientRect(), style = getComputedStyle(node);
+                        return rect.width > 0 && rect.height > 0 && style.visibility === 'visible' && style.display !== 'none';
+                    };
+                    const blocks = [q, stem, options, ...rows];
+                    if (!blocks.every(visible)) return null;
+                    if ([...q.ownerDocument.querySelectorAll('.el-loading-mask,[aria-busy="true"]')].some(visible)) return null;
+                    if (q.ownerDocument.fonts?.status === 'loading') return null;
+                    const images = [...stem.querySelectorAll('img'), ...options.querySelectorAll('.examquestions-answer img')];
+                    if (images.filter(visible).some(i => !i.complete || i.naturalWidth <= 0)) return null;
+                    return JSON.stringify([ids, blocks.map(node => {
+                        const rect = node.getBoundingClientRect();
+                        return [rect.x, rect.y, rect.width, rect.height].map(value => Math.round(value * 10));
+                    })]);
                 }
-                """)) return;
+                """, new { forScreenshot, studyVideo = _studyVideo }).WaitAsync(cancellationToken);
+            if (snapshot is not null && snapshot == previous) return;
+            previous = snapshot;
             await Task.Delay(250, cancellationToken);
         }
-        throw new TimeoutException($"第 {Number} 题题干尚未加载，已停止截图答题。");
+        throw new TimeoutException($"第 {number} 题{(forScreenshot ? "题干、选项块不可见、正在加载或截图布局未稳定" : "题干或选项结构未就绪")}，已停止截图答题。");
     }
 
     public async Task ApplyAnswersAsync(IReadOnlyCollection<ZhsAnswerOption> selected,
@@ -444,10 +473,21 @@ public sealed class ZhsQuestion
         if (currentKey != Key)
             throw new InvalidOperationException($"第 {Number} 题已切换，停止填写过期答案。");
         foreach (var option in _answers)
-            if (!await option.MatchesSnapshotAsync())
+            if (!await option.MatchesSnapshotAsync(compareText: !_studyVideo))
                 throw new InvalidOperationException($"第 {Number} 题选项发生变化，停止填写过期答案。");
         if (selected.Count == 0 || (!AllowsMultipleAnswers && selected.Count != 1))
             throw new InvalidOperationException($"第 {Number} 题答案数量不符合题型。");
+        if (_studyVideo)
+        {
+            // 新版按控件点击后直接翻题，不依赖隐藏 input 的保存状态，也不重复点击多选项。
+            foreach (var option in selected)
+            {
+                await option.ClickAsync(cancellationToken);
+                await Task.Delay(250, cancellationToken);
+            }
+            await Task.Delay(400, cancellationToken);
+            return;
+        }
         for (var attempt = 0; attempt < 3; attempt++)
         {
             foreach (var option in _answers)
@@ -477,7 +517,7 @@ public sealed class ZhsQuestion
         CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        await WaitForContentAsync(cancellationToken);
+        await WaitForContentAsync(cancellationToken, forScreenshot: true);
         try
         {
             return await _container.ScreenshotAsync(new LocatorScreenshotOptions
@@ -485,11 +525,11 @@ public sealed class ZhsQuestion
                 Animations = ScreenshotAnimations.Disabled,
                 Type = ScreenshotType.Png,
                 Timeout = 15_000
-            });
+            }).WaitAsync(cancellationToken);
         }
-        catch (PlaywrightException)
+        catch (Exception exception) when (exception is PlaywrightException or TimeoutException)
         {
-            return null;
+            throw new InvalidOperationException($"第 {Number} 题截图失败，已停止答题。", exception);
         }
     }
 }
@@ -516,13 +556,15 @@ public sealed class ZhsAnswerOption
     public string Text { get; }
     public string Value { get; }
 
-    public Task<bool> MatchesSnapshotAsync() => _row.EvaluateAsync<bool>("""
+    public Task<bool> MatchesSnapshotAsync(bool compareText = true) => _row.EvaluateAsync<bool>("""
         (row, expected) => {
             const input = row.querySelector('input[type=radio], input[type=checkbox]');
+            if (!input || (input.getAttribute('value') || '') !== expected.value) return false;
+            if (!expected.compareText) return true;
             const text = row.querySelector('.examquestions-answer')?.innerText.replace(/\s+/g, ' ').trim() || '';
-            return (input?.getAttribute('value') || '') === expected.value && text === expected.text;
+            return text === expected.text;
         }
-        """, new { value = Value, text = Text });
+        """, new { value = Value, text = Text, compareText });
 
     public Task<bool> IsSelectedAsync() => _row.EvaluateAsync<bool>("""
         row => {
@@ -544,13 +586,20 @@ public sealed class ZhsAnswerOption
 
     public Task SelectAsync(CancellationToken cancellationToken = default) => SetSelectedAsync(true, cancellationToken);
 
+    public async Task ClickAsync(CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        await _row.Locator("div.label.clearfix").First.ClickAsync(
+            new LocatorClickOptions { Timeout = 10_000 }).WaitAsync(cancellationToken);
+    }
+
     public async Task SetSelectedAsync(bool selected, CancellationToken cancellationToken = default)
     {
         for (var attempt = 0; attempt < 3; attempt++)
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (await IsSelectedAsync() == selected) return;
-            await _row.Locator("div.label.clearfix").First.ClickAsync(new LocatorClickOptions { Timeout = 10_000 });
+            await ClickAsync(cancellationToken);
             // 等待 Vue 写入真实答题状态，不强行 Check 隐藏 input。
             for (var poll = 0; poll < 10; poll++)
             {
