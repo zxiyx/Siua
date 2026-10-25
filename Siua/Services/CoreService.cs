@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Runtime.Versioning;
 using System.Security;
 using System.Threading;
 using System.Threading.Tasks;
@@ -41,6 +42,7 @@ public sealed class CoreService : ICoreService
     private bool _loginInProgress;
     // 登录恢复不能与刷课任务同时导航同一个页面。
     private readonly SemaphoreSlim _zhsPageGate = new(1, 1);
+    private static readonly SemaphoreSlim ChromiumInstallGate = new(1, 1);
 
     public CoreService(
         ILogService logService,
@@ -88,10 +90,20 @@ public sealed class CoreService : ICoreService
         }
         _logService.AddLog($"正在启动「{platform}」任务");
 
+        var startupToken = GetSessionToken();
         try
         {
             _playwright = await Playwright.CreateAsync();
-            _browser = await _playwright.Chromium.LaunchAsync(CreateBrowserOptions());
+            var browserType = _playwright.Chromium;
+            var browserOptions = CreateBrowserOptions();
+            if (_settings.BrowserCannel == "系统默认" && browserOptions.ExecutablePath is null)
+            {
+                _logService.AddLog("未识别到可用的系统浏览器，改用 Playwright Chromium");
+                await EnsureChromiumInstalledAsync(browserType.ExecutablePath, startupToken,
+                    () => Microsoft.Playwright.Program.Main(["install", "chromium"]));
+            }
+            startupToken.ThrowIfCancellationRequested();
+            _browser = await browserType.LaunchAsync(browserOptions);
             _page = await _browser.NewPageAsync();
             RegisterSessionEvents(_browser, _page, _sessionCts);
             _loginInProgress = true;
@@ -141,7 +153,7 @@ public sealed class CoreService : ICoreService
             StartLoginHeartbeat();
             return true;
         }
-        catch (OperationCanceledException) when (!IsSessionActive)
+        catch (OperationCanceledException) when (startupToken.IsCancellationRequested)
         {
             return false;
         }
@@ -513,35 +525,110 @@ public sealed class CoreService : ICoreService
             return null;
         }
 
-        try
+        string? ReadValue(RegistryHive hive, string path, string name)
         {
-            using var key = Registry.ClassesRoot.OpenSubKey(@"http\shell\open\command");
-            return ParseExecutablePath(key?.GetValue("")?.ToString());
-        }
-        catch (UnauthorizedAccessException exception)
-        {
-            _logService.AddLog(LogLevel.Error, "Browser", $"[注册表] 权限不足：{exception}");
-        }
-        catch (SecurityException exception)
-        {
-            _logService.AddLog(LogLevel.Error, "Browser", $"[注册表] 安全异常：{exception}");
-        }
-        catch (Exception exception)
-        {
-            _logService.AddLog(LogLevel.Error, "Browser", $"[注册表] 读取失败：{exception}");
+            if (!OperatingSystem.IsWindows()) return null;
+            try
+            {
+                using var root = RegistryKey.OpenBaseKey(hive, RegistryView.Default);
+                using var key = root.OpenSubKey(path);
+                return key?.GetValue(name)?.ToString();
+            }
+            catch (Exception exception) when (exception is UnauthorizedAccessException or SecurityException or IOException)
+            {
+                // 单个关联无法读取时仍继续尝试其它关联和安装路径。
+                _logService.AddLog(LogLevel.Error, "Browser", $"[注册表] 浏览器关联读取失败（{path}）：{exception}");
+                return null;
+            }
         }
 
+        return ResolveBrowserPath(ReadValue, File.Exists,
+        [
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
+            Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86)
+        ]);
+    }
+
+    [SupportedOSPlatform("windows")]
+    private static string? ResolveBrowserPath(
+        Func<RegistryHive, string, string, string?> readValue,
+        Func<string, bool> fileExists,
+        string[] installationRoots)
+    {
+        string? Resolve(string? command)
+        {
+            var path = ParseExecutablePath(command, fileExists);
+            if (path is null) return null;
+            // Chromium 驱动不能启动 Firefox、系统代理程序等非 Chromium 浏览器。
+            return Path.GetFileName(path).ToLowerInvariant() is
+                "chrome.exe" or "msedge.exe" or "chromium.exe" or "brave.exe" or
+                "vivaldi.exe" or "opera.exe" or "360chrome.exe" or "360se.exe" or "qqbrowser.exe"
+                ? path : null;
+        }
+
+        foreach (var scheme in new[] { "https", "http" })
+        {
+            var progId = readValue(RegistryHive.CurrentUser,
+                $@"Software\Microsoft\Windows\Shell\Associations\UrlAssociations\{scheme}\UserChoice", "ProgId");
+            if (string.IsNullOrWhiteSpace(progId)) continue;
+            var commandPath = $@"{progId}\shell\open\command";
+            var path = Resolve(readValue(RegistryHive.CurrentUser, @"Software\Classes\" + commandPath, "")) ??
+                       Resolve(readValue(RegistryHive.ClassesRoot, commandPath, ""));
+            if (path is not null) return path;
+        }
+
+        foreach (var scheme in new[] { "https", "http" })
+        {
+            var path = Resolve(readValue(RegistryHive.ClassesRoot, $@"{scheme}\shell\open\command", ""));
+            if (path is not null) return path;
+        }
+
+        foreach (var executable in new[] { "chrome.exe", "msedge.exe" })
+        {
+            foreach (var hive in new[] { RegistryHive.CurrentUser, RegistryHive.LocalMachine })
+            {
+                var path = Resolve(readValue(hive, @"Software\Microsoft\Windows\CurrentVersion\App Paths\" + executable, ""));
+                if (path is not null) return path;
+            }
+        }
+        foreach (var root in installationRoots)
+        {
+            if (string.IsNullOrWhiteSpace(root)) continue;
+            foreach (var relative in new[] { @"Google\Chrome\Application\chrome.exe", @"Microsoft\Edge\Application\msedge.exe" })
+            {
+                var path = Resolve(Path.Combine(root, relative));
+                if (path is not null) return path;
+            }
+        }
         return null;
     }
 
-    private static string? ParseExecutablePath(string? command)
+    private async Task EnsureChromiumInstalledAsync(string executable, CancellationToken cancellationToken, Func<int> install)
+    {
+        await ChromiumInstallGate.WaitAsync(cancellationToken);
+        try
+        {
+            if (File.Exists(executable)) return;
+            _logService.AddLog("正在下载并安装 Playwright Chromium，首次安装可能需要几分钟...");
+            // 与随软件分发的 playwright.ps1 使用同一入口，无需额外安装 pwsh。
+            var exitCode = await Task.Run(install, cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
+            if (exitCode != 0 || !File.Exists(executable))
+                throw new InvalidOperationException($"Playwright Chromium 安装失败，退出码：{exitCode}，预期浏览器路径：{executable}。可在软件目录运行 playwright.ps1 install chromium 后重试。");
+            _logService.AddLog("Playwright Chromium 安装完成，正在启动浏览器");
+        }
+        finally { ChromiumInstallGate.Release(); }
+    }
+
+    private static string? ParseExecutablePath(string? command, Func<string, bool> fileExists)
     {
         if (string.IsNullOrWhiteSpace(command))
         {
             return null;
         }
 
-        var trimmedCommand = command.Trim();
+        var trimmedCommand = Environment.ExpandEnvironmentVariables(command.Trim());
         string path;
         if (trimmedCommand.StartsWith('"'))
         {
@@ -555,14 +642,13 @@ public sealed class CoreService : ICoreService
         }
         else
         {
-            path = trimmedCommand.Split([' ', '\t'], 2)[0];
-            if (!path.Contains(".exe", StringComparison.OrdinalIgnoreCase))
-            {
-                return null;
-            }
+            // App Paths 和部分精简系统的命令未给含空格的路径加引号。
+            var extensionEnd = trimmedCommand.IndexOf(".exe", StringComparison.OrdinalIgnoreCase);
+            if (extensionEnd < 0) return null;
+            path = trimmedCommand[..(extensionEnd + 4)];
         }
 
-        return File.Exists(path) ? path : null;
+        return Path.IsPathFullyQualified(path) && fileExists(path) ? path : null;
     }
 
     private void DisposeBrowserResources()
