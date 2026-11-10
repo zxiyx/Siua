@@ -32,11 +32,13 @@ public sealed class ZhsChapterTest
     private readonly ILocator _locator;
 
     public bool IsStudyVideo { get; }
+    public bool UsesModernExam { get; private set; }
 
     public ZhsChapterTest(ILocator locator, bool studyVideo = false)
     {
         _locator = locator;
         IsStudyVideo = studyVideo;
+        UsesModernExam = studyVideo;
     }
 
     public async Task<bool> IsAvailableAsync() =>
@@ -81,6 +83,10 @@ public sealed class ZhsChapterTest
                 State = WaitForSelectorState.Visible,
                 Timeout = 30_000
             });
+        // 课程目录与试卷版本独立：wisdom-mooc 也会打开军事理论课使用的 H5 试卷。
+        UsesModernExam = IsStudyVideo ||
+            (Uri.TryCreate(examPage.Url, UriKind.Absolute, out var examUri) &&
+             examUri.Host.Equals("onlineexamh5new.zhihuishu.com", StringComparison.OrdinalIgnoreCase));
         return examPage;
     }
 
@@ -121,7 +127,7 @@ public sealed class ZhsChapterTest
             Timeout = 15_000
         });
 
-        var question = new ZhsQuestion(container, IsStudyVideo);
+        var question = new ZhsQuestion(container, UsesModernExam);
         await question.LoadAsync(cancellationToken);
         return question;
     }
@@ -134,7 +140,7 @@ public sealed class ZhsChapterTest
         var questions = new List<ZhsQuestion>(count);
         for (var index = 0; index < count; index++)
         {
-            var question = new ZhsQuestion(containers.Nth(index), IsStudyVideo);
+            var question = new ZhsQuestion(containers.Nth(index), UsesModernExam);
             await question.WaitForContentAsync(cancellationToken);
             await question.LoadAsync(cancellationToken);
             questions.Add(question);
@@ -153,7 +159,7 @@ public sealed class ZhsChapterTest
             QuestionSelector, async () =>
             {
                 foreach (var container in await examPage.Locator(QuestionSelector).AllAsync())
-                    await new ZhsQuestion(container, IsStudyVideo).WaitForContentAsync(cancellationToken, forScreenshot: true);
+                    await new ZhsQuestion(container, UsesModernExam).WaitForContentAsync(cancellationToken, forScreenshot: true);
             });
     }
 
@@ -165,7 +171,7 @@ public sealed class ZhsChapterTest
     {
         cancellationToken.ThrowIfCancellationRequested();
         var switchBox = examPage.Locator(SwitchButtonSelector).First;
-        if (!IsStudyVideo)
+        if (!UsesModernExam)
             await switchBox.WaitForAsync(new LocatorWaitForOptions
             {
                 State = WaitForSelectorState.Visible,
@@ -174,7 +180,7 @@ public sealed class ZhsChapterTest
 
         var saveButton = switchBox.Locator("button").Filter(
             new LocatorFilterOptions { HasTextRegex = SaveButtonText });
-        if (!IsStudyVideo && await saveButton.CountAsync() > 0 && await saveButton.First.IsVisibleAsync())
+        if (!UsesModernExam && await saveButton.CountAsync() > 0 && await saveButton.First.IsVisibleAsync())
         {
             await saveButton.First.ClickAsync();
             await Task.Delay(500, cancellationToken);
@@ -189,10 +195,10 @@ public sealed class ZhsChapterTest
             await Task.Delay(500, cancellationToken);
             if (await nextButton.CountAsync() == 0 || !await nextButton.First.IsVisibleAsync())
             {
-                var last = new ZhsQuestion(examPage.Locator(QuestionSelector).Last, IsStudyVideo);
+                var last = new ZhsQuestion(examPage.Locator(QuestionSelector).Last, UsesModernExam);
                 await last.LoadAsync(cancellationToken);
                 var current = await LoadCurrentQuestionAsync(examPage, cancellationToken);
-                if (IsStudyVideo && isLastQuestion && last.Key == previousQuestionKey && current.Key == last.Key)
+                if (UsesModernExam && isLastQuestion && last.Key == previousQuestionKey && current.Key == last.Key)
                     return false;
                 throw new PlaywrightException("智慧树章节测试没有找到可见的“下一题”按钮，且未确认已到最后一题。");
             }

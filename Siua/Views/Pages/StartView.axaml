@@ -1,179 +1,162 @@
-﻿<UserControl xmlns="https://github.com/avaloniaui"
-             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-             xmlns:vm="using:Siua.ViewModels"
-             xmlns:co="using:Siua.Common"
-             mc:Ignorable="d" d:DesignWidth="900" d:DesignHeight="680"
-             x:DataType="vm:StartViewModel"
-             xmlns:p="https://github.com/kikipoulet/SukiUI" 
-             xmlns:icons="clr-namespace:Material.Icons.Avalonia;assembly=Material.Icons.Avalonia"
-             xmlns:suki="clr-namespace:SukiUI.Controls;assembly=SukiUI"
-             x:Class="Siua.Views.Pages.StartView">
-    <UserControl.Resources>
-        <co:StringEqualsConverter x:Key="StringEquals"/>
-    </UserControl.Resources>
-
+<UserControl xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+ xmlns:vm="using:Siua.ViewModels" xmlns:co="using:Siua.Common" xmlns:p="https://github.com/kikipoulet/SukiUI"
+ xmlns:icons="clr-namespace:Material.Icons.Avalonia;assembly=Material.Icons.Avalonia"
+ x:Class="Siua.Views.Pages.StartView" x:DataType="vm:StartViewModel">
+ <Grid Margin="28,24" RowDefinitions="Auto,*" RowSpacing="16">
+  <Grid ColumnDefinitions="*,Auto">
+   <StackPanel Spacing="6"><TextBlock Text="课程工作台" Classes="web-title"/><TextBlock Text="选择课程，安排任务，让学习有条不紊。" Classes="web-muted"/></StackPanel>
+   <Border Grid.Column="1" Classes="badge" VerticalAlignment="Center"><TextBlock Text="{Binding PlatformAvailabilityText}" FontSize="11" Foreground="{DynamicResource WebAccent}"/></Border>
+  </Grid>
+  <TabControl Grid.Row="1" Classes="web-tabs" SelectedIndex="{Binding WorkspaceTab}">
+   <TabItem Header="课程任务">
     <ScrollViewer HorizontalScrollBarVisibility="Disabled">
-        <StackPanel Margin="22" Spacing="14" MaxWidth="1000" HorizontalAlignment="Stretch">
-            <Grid ColumnDefinitions="*,Auto">
-                <StackPanel Spacing="4">
-                    <TextBlock Text="课程工作台" FontSize="25" FontWeight="SemiBold"/>
-                    <TextBlock Text="选择平台，配置本次学习任务" FontSize="13"
-                               Foreground="{DynamicResource SukiLowText}"/>
-                </StackPanel>
-                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="7"
-                            Margin="12,0" VerticalAlignment="Center">
-                    <icons:MaterialIcon Kind="CheckCircle" Width="16" Height="16"
-                                        Foreground="{DynamicResource SukiPrimaryColor}"/>
-                    <TextBlock Text="{Binding PlatformAvailabilityText}" FontSize="13"
-                               Foreground="{DynamicResource SukiPrimaryColor}"/>
-                </StackPanel>
-            </Grid>
-
-            <suki:GlassCard CornerRadius="12">
-                <StackPanel Spacing="10">
-                    <StackPanel Orientation="Horizontal" Spacing="8">
-                        <icons:MaterialIcon Kind="ViewDashboard" Width="19" Height="19"
-                                            Foreground="{DynamicResource SukiPrimaryColor}"/>
-                        <TextBlock Text="选择学习平台" FontSize="16" FontWeight="SemiBold"/>
-                    </StackPanel>
-
-                    <WrapPanel Orientation="Horizontal" IsEnabled="{Binding !IsRunning}">
-                        <RadioButton Classes="GigaChips" GroupName="Platform" Width="168" Height="72" Margin="0,0,8,8"
-                                     IsChecked="{Binding SelectedPlatform, Converter={StaticResource StringEquals}, ConverterParameter=学习通}">
-                            <StackPanel Orientation="Horizontal" Spacing="9">
-                                <icons:MaterialIcon Kind="School" Width="24" Height="24"/>
-                                <StackPanel Spacing="2">
-                                    <TextBlock Text="学习通" FontSize="15" FontWeight="SemiBold"/>
-                                    <TextBlock Text="超星学习通" FontSize="11" Opacity="0.72"/>
-                                </StackPanel>
-                            </StackPanel>
-                        </RadioButton>
-                        <RadioButton Classes="GigaChips" GroupName="Platform" Width="168" Height="72" Margin="0,0,8,8"
-                                     IsChecked="{Binding SelectedPlatform, Converter={StaticResource StringEquals}, ConverterParameter=智慧树}">
-                            <StackPanel Orientation="Horizontal" Spacing="9">
-                                <icons:MaterialIcon Kind="Tree" Width="24" Height="24"/>
-                                <StackPanel Spacing="2">
-                                    <TextBlock Text="智慧树" FontSize="15" FontWeight="SemiBold"/>
-                                    <TextBlock Text="知到智慧树" FontSize="11" Opacity="0.72"/>
-                                </StackPanel>
-                            </StackPanel>
-                        </RadioButton>
-                    </WrapPanel>
-                </StackPanel>
-            </suki:GlassCard>
-
-            <suki:GlassCard CornerRadius="12">
-                <StackPanel Spacing="11">
-                    <StackPanel Orientation="Horizontal" Spacing="8">
-                        <icons:MaterialIcon Kind="PlayCircle" Width="19" Height="19"
-                                            Foreground="{DynamicResource SukiPrimaryColor}"/>
-                        <TextBlock Text="开始当前平台任务" FontSize="16" FontWeight="SemiBold"/>
-                    </StackPanel>
-
-                    <Grid ColumnDefinitions="*,360" ColumnSpacing="16">
-                        <StackPanel VerticalAlignment="Center">
-                            <TextBlock Text="执行课程" FontWeight="SemiBold"/>
-                            <TextBlock FontSize="12" Foreground="{DynamicResource SukiLowText}">
-                                <Run Text="选择「"/><Run Text="{Binding SelectedPlatform}"/><Run Text="」本次需要处理的课程"/>
-                            </TextBlock>
-                        </StackPanel>
-                        <ComboBox Grid.Column="1"
-                                  ItemsSource="{Binding Settings.Courses}"
-                                  SelectedItem="{Binding SelectedCourse}"
-                                  IsEnabled="{Binding !IsRunning}"
-                                  Height="34" HorizontalAlignment="Stretch"
-                                  ToolTip.Tip="{Binding SelectedCourse}"/>
-                    </Grid>
-
-                    <Separator/>
-
-                    <Grid ColumnDefinitions="*,360" ColumnSpacing="16">
-                        <StackPanel VerticalAlignment="Center" Spacing="3">
-                            <TextBlock Text="自动登录" FontWeight="SemiBold"/>
-                            <TextBlock Text="{Binding AutoLoginDescription}" TextWrapping="Wrap" FontSize="12"
-                                       Foreground="{DynamicResource SukiLowText}"/>
-                        </StackPanel>
-                        <Grid Grid.Column="1" ColumnDefinitions="Auto,*" ColumnSpacing="12">
-                            <CheckBox Content="启用" IsChecked="{Binding Settings.Login.Enabled, Mode=TwoWay}"
-                                      IsEnabled="{Binding CanConfigureAutoLogin}" VerticalAlignment="Center"/>
-                            <ComboBox Grid.Column="1" ItemsSource="{Binding LoginAccounts}" SelectedItem="{Binding SelectedLoginAccount}"
-                                      IsEnabled="{Binding CanSelectLoginAccount}" PlaceholderText="选择登录账号" Height="34"
-                                      HorizontalAlignment="Stretch"/>
-                        </Grid>
-                    </Grid>
-
-                    <Separator/>
-
-                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
-                        <StackPanel>
-                            <TextBlock Text="启动学习" FontWeight="SemiBold"/>
-                            <TextBlock Text="使用所选课程地址开始执行自动化任务"
-                                       FontSize="12" Foreground="{DynamicResource SukiLowText}"/>
-                        </StackPanel>
-                        <Button Grid.Column="1" Classes="Flat" Height="34" MinWidth="108"
-                                Command="{Binding StartRunningCommand}"
-                                Content="{Binding RunButtonText}"
-                                p:ButtonExtensions.Icon="{icons:MaterialIconExt Kind=Play}"
-                                p:ButtonExtensions.ShowProgress="{Binding IsRunning}"/>
-                    </Grid>
-                </StackPanel>
-            </suki:GlassCard>
-
+     <StackPanel Spacing="20" Margin="0,20,0,0">
+      <Grid ColumnDefinitions="*,290" ColumnSpacing="20">
+       <Border Classes="panel" Padding="0">
+        <Grid RowDefinitions="Auto,*,Auto" MinHeight="300">
+         <Border Padding="20,16" BorderBrush="{DynamicResource WebBorder}" BorderThickness="0,0,0,1">
+          <Grid ColumnDefinitions="*,150" ColumnSpacing="14">
+           <StackPanel VerticalAlignment="Center" Spacing="3"><TextBlock Text="选择课程" Classes="web-section"/><TextBlock Text="{Binding SelectionSummary}" Classes="web-muted"/></StackPanel>
+           <ComboBox Grid.Column="1" ItemsSource="{Binding Platforms}" SelectedItem="{Binding SelectedPlatform}" IsEnabled="{Binding !IsRunning}" HorizontalAlignment="Stretch"/>
+          </Grid>
+         </Border>
+         <Grid Grid.Row="1" Margin="20,16" IsEnabled="{Binding !IsRunning}">
+          <StackPanel IsVisible="{Binding !IsMultiCourseMode}" Spacing="16" VerticalAlignment="Top">
+           <TextBlock Text="执行课程" Classes="web-label"/>
+           <ComboBox ItemsSource="{Binding Settings.Courses}" SelectedItem="{Binding SelectedCourse}" HorizontalAlignment="Stretch" PlaceholderText="选择一门课程" ToolTip.Tip="{Binding SelectedCourse}"/>
+           <TextBlock Text="开启右侧多课程模式，即可勾选多门课程并行执行。" Classes="web-muted"/>
+          </StackPanel>
+          <ScrollViewer IsVisible="{Binding IsMultiCourseMode}" MaxHeight="230" HorizontalScrollBarVisibility="Disabled">
+           <ItemsControl ItemsSource="{Binding CourseChoices}"><ItemsControl.ItemTemplate><DataTemplate x:DataType="co:CourseChoice">
+            <Border BorderBrush="{DynamicResource WebBorder}" BorderThickness="0,0,0,1" Padding="0,12">
+             <CheckBox IsChecked="{Binding IsSelected}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+              <TextBlock Text="{Binding Url}" TextTrimming="CharacterEllipsis" FontSize="12" ToolTip.Tip="{Binding Url}"/>
+             </CheckBox>
+            </Border>
+           </DataTemplate></ItemsControl.ItemTemplate></ItemsControl>
+          </ScrollViewer>
+          <StackPanel IsVisible="{Binding !HasConfiguredCourse}" VerticalAlignment="Center" Spacing="8" Background="{DynamicResource WebSurface}">
+           <TextBlock Text="还没有课程" Classes="web-section" HorizontalAlignment="Center"/>
+           <TextBlock Text="在左侧「课程管理」中添加课程地址后开始。" Classes="web-muted" HorizontalAlignment="Center"/>
+          </StackPanel>
+         </Grid>
+         <Border Grid.Row="2" BorderBrush="{DynamicResource WebBorder}" BorderThickness="0,1,0,0" Padding="16,8">
+          <Grid ColumnDefinitions="*,Auto">
+           <TextBlock Text="课程按平台分别管理" Classes="web-muted" VerticalAlignment="Center"/>
+           <StackPanel Grid.Column="1" Orientation="Horizontal" IsVisible="{Binding IsMultiCourseMode}" IsEnabled="{Binding !IsRunning}">
+            <Button Classes="web subtle" Content="全选" Command="{Binding SelectAllCoursesCommand}"/>
+            <Button Classes="web subtle" Content="清空" Command="{Binding ClearCourseSelectionCommand}"/>
+           </StackPanel>
+          </Grid>
+         </Border>
+        </Grid>
+       </Border>
+       <Border Grid.Column="1" Classes="panel">
+        <StackPanel Spacing="12">
+         <TextBlock Text="启动配置" Classes="web-section"/>
+         <Grid ColumnDefinitions="*,Auto"><TextBlock Text="多课程模式" VerticalAlignment="Center"/><ToggleButton Grid.Column="1" Classes="Switch" IsChecked="{Binding Settings.MultiCourseMode}" IsEnabled="{Binding !IsRunning}"/></Grid>
+         <Grid ColumnDefinitions="*,90" IsVisible="{Binding IsMultiCourseMode}"><TextBlock Text="并发课程数" VerticalAlignment="Center" Classes="web-muted"/><NumericUpDown Grid.Column="1" Value="{Binding Settings.MaxConcurrentCourses}" Minimum="1" Maximum="8" Increment="1" FormatString="0" IsEnabled="{Binding !IsRunning}"/></Grid>
+         <Border Height="1" Background="{DynamicResource WebBorder}"/>
+         <Grid ColumnDefinitions="*,Auto"><TextBlock Text="自动登录" VerticalAlignment="Center"/><ToggleButton Grid.Column="1" Classes="Switch" IsChecked="{Binding Settings.Login.Enabled}" IsEnabled="{Binding CanConfigureAutoLogin}"/></Grid>
+         <ComboBox IsVisible="{Binding Settings.Login.Enabled}" ItemsSource="{Binding LoginAccounts}" SelectedItem="{Binding SelectedLoginAccount}" IsEnabled="{Binding CanSelectLoginAccount}" HorizontalAlignment="Stretch" PlaceholderText="选择登录账号"/>
+         <TextBlock Text="{Binding AutoLoginDescription}" Classes="web-muted" FontSize="11"/>
+         <Button Classes="web primary" Content="{Binding RunButtonText}" Command="{Binding StartRunningCommand}" HorizontalAlignment="Stretch" Height="40"/>
+         <TextBlock IsVisible="{Binding HasTaskMessage}" Text="{Binding TaskMessage}" Foreground="{DynamicResource WebDanger}" TextWrapping="Wrap" FontSize="12"/>
+        </StackPanel>
+       </Border>
+      </Grid>
+      <Border Classes="panel" Padding="0">
+       <StackPanel>
+        <Grid ColumnDefinitions="*,Auto" Margin="20,18">
+         <TextBlock Text="任务队列" Classes="web-section" VerticalAlignment="Center"/>
+         <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="18">
+          <TextBlock Classes="web-muted"><Run Text="运行 "/><Run Text="{Binding RunningTaskCount}" FontWeight="SemiBold"/></TextBlock>
+          <TextBlock Classes="web-muted"><Run Text="排队 "/><Run Text="{Binding QueuedTaskCount}" FontWeight="SemiBold"/></TextBlock>
+          <TextBlock Classes="web-muted"><Run Text="完成 "/><Run Text="{Binding FinishedTaskCount}" FontWeight="SemiBold"/></TextBlock>
+         </StackPanel>
+        </Grid>
+        <Border Background="{DynamicResource WebCanvas}" Padding="20,11" BorderBrush="{DynamicResource WebBorder}" BorderThickness="0,1">
+         <Grid ColumnDefinitions="*,130,160,70" ColumnSpacing="16"><TextBlock Text="课程 / 任务" Classes="web-label"/><TextBlock Grid.Column="1" Text="登录账号" Classes="web-label"/><TextBlock Grid.Column="2" Text="状态" Classes="web-label"/><TextBlock Grid.Column="3" Text="操作" Classes="web-label" HorizontalAlignment="Right"/></Grid>
+        </Border>
+        <ItemsControl ItemsSource="{Binding Tasks}"><ItemsControl.ItemTemplate><DataTemplate x:DataType="co:CourseTask">
+         <Border Padding="20,14" BorderBrush="{DynamicResource WebBorder}" BorderThickness="0,0,0,1">
+          <Grid ColumnDefinitions="*,130,160,70" ColumnSpacing="16">
+           <StackPanel Spacing="5"><TextBlock Text="{Binding Label}" FontWeight="Medium"/><TextBlock Text="{Binding CourseUrl}" Classes="web-muted" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding CourseUrl}"/></StackPanel>
+           <TextBlock Grid.Column="1" Text="{Binding AccountName}" Classes="web-muted" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+           <TextBlock Grid.Column="2" Text="{Binding Status}" FontSize="12" Foreground="{DynamicResource WebAccent}" VerticalAlignment="Center" TextWrapping="Wrap"/>
+           <Grid Grid.Column="3" VerticalAlignment="Center">
+            <Button Classes="web subtle danger" Content="停止" Command="{Binding StopCommand}" IsVisible="{Binding !IsFinished}" Padding="8,6"/>
+            <Button Classes="web" Content="重试" IsVisible="{Binding CanRetry}" CommandParameter="{Binding}" x:CompileBindings="False" Command="{Binding $parent[UserControl].DataContext.RetryTaskCommand}" Padding="8,6"/>
+           </Grid>
+          </Grid>
+         </Border>
+        </DataTemplate></ItemsControl.ItemTemplate></ItemsControl>
+        <StackPanel IsVisible="{Binding !HasTasks}" Margin="24,32" Spacing="8" HorizontalAlignment="Center">
+         <icons:MaterialIcon Kind="PlaylistPlay" Width="30" Height="30" Foreground="{DynamicResource WebMuted}" HorizontalAlignment="Center"/>
+         <TextBlock Text="等待开始新的任务" HorizontalAlignment="Center" FontWeight="Medium"/>
+         <TextBlock Text="选择多门课程并启动后，在这里查看进度和管理任务。" Classes="web-muted"/>
+        </StackPanel>
+       </StackPanel>
+      </Border>
+     </StackPanel>
+    </ScrollViewer>
+   </TabItem>
+   <TabItem Header="执行策略">
+    <ScrollViewer HorizontalScrollBarVisibility="Disabled"><StackPanel Spacing="20" Margin="0,20,0,0">
+     <TextBlock Text="配置视频、章节与答题行为。多课程任务使用启动时的设置。" Classes="web-muted"/>
             <Grid ColumnDefinitions="*,*" ColumnSpacing="14">
-                <suki:GlassCard CornerRadius="12">
+                <Border Classes="panel" CornerRadius="12">
                     <StackPanel Spacing="11">
                         <StackPanel Orientation="Horizontal" Spacing="8">
                             <icons:MaterialIcon Kind="PlayCircle" Width="19" Height="19"
-                                                Foreground="{DynamicResource SukiPrimaryColor}"/>
+                                                Foreground="{DynamicResource WebAccent}"/>
                             <TextBlock Text="视频策略" FontSize="16" FontWeight="SemiBold"/>
                         </StackPanel>
                         <Grid ColumnDefinitions="*,Auto">
-                            <StackPanel><TextBlock Text="静音播放" FontWeight="SemiBold"/><TextBlock Text="播放视频时保持静音" FontSize="12" Foreground="{DynamicResource SukiLowText}"/></StackPanel>
+                            <StackPanel><TextBlock Text="静音播放" FontWeight="SemiBold"/><TextBlock Text="播放视频时保持静音" FontSize="12" TextWrapping="Wrap" Foreground="{DynamicResource WebMuted}"/></StackPanel>
                             <ToggleButton Grid.Column="1" Classes="Switch" IsChecked="{Binding Settings.IsMuted}"/>
                         </Grid>
                         <Separator/>
                         <Grid ColumnDefinitions="*,Auto">
-                            <StackPanel><TextBlock Text="尝试快速完成" FontWeight="SemiBold"/><TextBlock Text="允许时拉满视频进度" FontSize="12" Foreground="{DynamicResource SukiLowText}"/></StackPanel>
+                            <StackPanel><TextBlock Text="尝试快速完成" FontWeight="SemiBold"/><TextBlock Text="允许时拉满视频进度" FontSize="12" TextWrapping="Wrap" Foreground="{DynamicResource WebMuted}"/></StackPanel>
                             <ToggleButton Grid.Column="1" Classes="Switch" IsChecked="{Binding Settings.TryFinishVideo}"/>
                         </Grid>
                         <Separator/>
                         <Grid ColumnDefinitions="*,92">
-                            <StackPanel><TextBlock Text="播放倍速" FontWeight="SemiBold"/><TextBlock Text="建议保持平台允许范围" FontSize="12" Foreground="{DynamicResource SukiLowText}"/></StackPanel>
+                            <StackPanel><TextBlock Text="播放倍速" FontWeight="SemiBold"/><TextBlock Text="建议保持平台允许范围" FontSize="12" TextWrapping="Wrap" Foreground="{DynamicResource WebMuted}"/></StackPanel>
                             <TextBox Grid.Column="1" Height="34" Text="{Binding Settings.VideoPlayRate}" TextAlignment="Center"/>
                         </Grid>
                     </StackPanel>
-                </suki:GlassCard>
+                </Border>
 
-                <suki:GlassCard Grid.Column="1" CornerRadius="12">
+                <Border Classes="panel" Grid.Column="1" CornerRadius="12">
                     <StackPanel Spacing="11">
                         <StackPanel Orientation="Horizontal" Spacing="8">
-                            <icons:MaterialIcon Kind="Tune" Width="19" Height="19" Foreground="{DynamicResource SukiPrimaryColor}"/>
+                            <icons:MaterialIcon Kind="Tune" Width="19" Height="19" Foreground="{DynamicResource WebAccent}"/>
                             <TextBlock Text="流程策略" FontSize="16" FontWeight="SemiBold"/>
                         </StackPanel>
                         <Grid ColumnDefinitions="*,Auto">
-                            <StackPanel><TextBlock Text="跳过已完成任务点" FontWeight="SemiBold"/><TextBlock Text="忽略已完成的视频与文档" FontSize="12" Foreground="{DynamicResource SukiLowText}"/></StackPanel>
+                            <StackPanel><TextBlock Text="跳过已完成任务点" FontWeight="SemiBold"/><TextBlock Text="忽略已完成的视频与文档" FontSize="12" TextWrapping="Wrap" Foreground="{DynamicResource WebMuted}"/></StackPanel>
                             <ToggleButton Grid.Column="1" Classes="Switch" IsChecked="{Binding Settings.JumpCompleted}"/>
                         </Grid>
                         <Separator/>
                         <Grid ColumnDefinitions="*,92">
-                            <StackPanel><TextBlock Text="弹窗等待" FontWeight="SemiBold"/><TextBlock Text="关闭提示弹窗的延时（ms）" FontSize="12" Foreground="{DynamicResource SukiLowText}"/></StackPanel>
+                            <StackPanel><TextBlock Text="弹窗等待" FontWeight="SemiBold"/><TextBlock Text="关闭提示弹窗的延时（ms）" FontSize="12" TextWrapping="Wrap" Foreground="{DynamicResource WebMuted}"/></StackPanel>
                             <TextBox Grid.Column="1" Height="34" Text="{Binding Settings.PopupTimeout}" TextAlignment="Center"/>
                         </Grid>
                         <Separator/>
                         <Grid ColumnDefinitions="*,92">
-                            <StackPanel><TextBlock Text="章节间隔" FontWeight="SemiBold"/><TextBlock Text="切换下一章节的延时（ms）" FontSize="12" Foreground="{DynamicResource SukiLowText}"/></StackPanel>
+                            <StackPanel><TextBlock Text="章节间隔" FontWeight="SemiBold"/><TextBlock Text="切换下一章节的延时（ms）" FontSize="12" TextWrapping="Wrap" Foreground="{DynamicResource WebMuted}"/></StackPanel>
                             <TextBox Grid.Column="1" Height="34" Text="{Binding Settings.ChapterJumpInterval}" TextAlignment="Center"/>
                         </Grid>
                     </StackPanel>
-                </suki:GlassCard>
+                </Border>
             </Grid>
 
-            <suki:GlassCard CornerRadius="12">
+            <Border Classes="panel" CornerRadius="12">
                 <StackPanel Spacing="11">
                     <StackPanel Orientation="Horizontal" Spacing="8">
-                        <icons:MaterialIcon Kind="Pencil" Width="20" Height="20" Foreground="{DynamicResource SukiPrimaryColor}"/>
+                        <icons:MaterialIcon Kind="Pencil" Width="20" Height="20" Foreground="{DynamicResource WebAccent}"/>
                         <TextBlock Text="答题与文字识别" FontSize="16" FontWeight="SemiBold"/>
                     </StackPanel>
 
@@ -181,7 +164,7 @@
                         <StackPanel>
                             <TextBlock Text="自动答题" FontWeight="SemiBold"/>
                             <TextBlock Text="使用已配置的 AI 模型分析并给出答案"
-                                       FontSize="12" Foreground="{DynamicResource SukiLowText}"/>
+                                       FontSize="12" TextWrapping="Wrap" Foreground="{DynamicResource WebMuted}"/>
                         </StackPanel>
                         <ToggleButton Grid.Column="1" Classes="Switch"
                                       IsChecked="{Binding Settings.AutoTest}"/>
@@ -191,9 +174,9 @@
 
                     <Grid ColumnDefinitions="*,Auto">
                         <StackPanel>
-                            <TextBlock Text="随机答题（智慧树测试中）" FontWeight="SemiBold"/>
-                            <TextBlock Text="无需配置 AI，随机选择答案；填空随机填汉字或数字" TextWrapping="Wrap"
-                                       FontSize="12" Foreground="{DynamicResource SukiLowText}"/>
+                            <TextBlock Text="随机答题" FontWeight="SemiBold"/>
+                            <TextBlock Text="无需 AI 或 OCR；智慧树支持单选、多选和判断，学习通另支持随机填空" TextWrapping="Wrap"
+                                       FontSize="12" Foreground="{DynamicResource WebMuted}"/>
                         </StackPanel>
                         <ToggleButton Grid.Column="1" Classes="Switch"
                                       IsChecked="{Binding Settings.RandomTest}"/>
@@ -205,24 +188,26 @@
                         <StackPanel>
                             <TextBlock Text="Pix2Text" FontWeight="SemiBold"/>
                             <TextBlock Text="首次使用先安装运行环境，之后启动本地文字与数学公式识别服务"
-                                       FontSize="12" Foreground="{DynamicResource SukiLowText}"/>
+                                       FontSize="12" TextWrapping="Wrap" Foreground="{DynamicResource WebMuted}"/>
                         </StackPanel>
                         <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
-                            <Button Classes="Flat" Height="34" MinWidth="100"
+                            <Button Classes="web" Height="34" MinWidth="100"
                                     Content="安装" Command="{Binding InstallPix2TextCommand}"
                                     p:ButtonExtensions.Icon="{icons:MaterialIconExt Kind=Download}"
                                     p:ButtonExtensions.ShowProgress="{Binding IsInstallingPix2Text}"/>
-                            <Button Classes="Flat" Height="34" MinWidth="100"
+                            <Button Classes="web" Height="34" MinWidth="100"
                                     Content="启动" Command="{Binding StartPix2TextCommand}"
                                     p:ButtonExtensions.Icon="{icons:MaterialIconExt Kind=Play}"
                                     p:ButtonExtensions.ShowProgress="{Binding IsStartingPix2Text}"/>
-                            <Button Classes="Flat" Height="34" MinWidth="100"
+                            <Button Classes="web" Height="34" MinWidth="100"
                                     Content="停止" Command="{Binding StopPix2TextCommand}"
                                     p:ButtonExtensions.Icon="{icons:MaterialIconExt Kind=Stop}"/>
                         </StackPanel>
                     </Grid>
                 </StackPanel>
-            </suki:GlassCard>
-        </StackPanel>
-    </ScrollViewer>
+            </Border>
+    </StackPanel></ScrollViewer>
+   </TabItem>
+  </TabControl>
+ </Grid>
 </UserControl>

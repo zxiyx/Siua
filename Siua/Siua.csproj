@@ -24,11 +24,11 @@
     </PropertyGroup>
     <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
       <IsPublishable>True</IsPublishable>
-      <DebugType>full</DebugType>
+      <DebugType>portable</DebugType>
     </PropertyGroup>
     <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
       <IsPublishable>True</IsPublishable>
-      <DebugType>full</DebugType>
+      <DebugType>portable</DebugType>
     </PropertyGroup>
 
     <ItemGroup>

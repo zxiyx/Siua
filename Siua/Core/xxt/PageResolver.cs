@@ -242,12 +242,15 @@ public sealed class XxtPageResolver
         return true;
     }
 
+    public bool ReachedCourseEnd { get; private set; }
+
     public async Task<bool> NextPageAsync(CancellationToken cancellationToken = default, int timeout = 30_000,
         Action? beforeNavigation = null)
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (await IsAtCourseEndAsync())
         {
+            ReachedCourseEnd = true;
             _logService.AddLog(LogLevel.Info, "Xxt", "已到课程目录最后一节，结束本次学习");
             return false;
         }
@@ -262,6 +265,7 @@ public sealed class XxtPageResolver
             // 目录可能在等待期间加载完成，重新核实；隐藏按钮本身不足以证明已到末尾。
             if (await IsAtCourseEndAsync())
             {
+                ReachedCourseEnd = true;
                 _logService.AddLog(LogLevel.Info, "Xxt", "已到课程目录最后一节，结束本次学习");
                 return false;
             }

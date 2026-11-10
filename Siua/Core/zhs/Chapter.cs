@@ -66,7 +66,8 @@ public sealed class ZhsChapter
             _sections.Add(new ZhsSection(sectionLocator));
         }
 
-        var testBox = content.Locator("div.test-box").First;
+        var testBox = content.Locator(".test-box").Filter(new LocatorFilterOptions
+        { HasTextRegex = new Regex(@"测试") }).First;
         if (await testBox.CountAsync() > 0)
             ChapterTest = new ZhsChapterTest(testBox);
     }
@@ -117,6 +118,10 @@ public sealed class ZhsSection
         cancellationToken.ThrowIfCancellationRequested();
         if (_studyVideo)
             return await _locator.Locator(".time_icofinish").CountAsync() > 0 ? 100 : 0;
+        // wisdom-mooc 的已完成小节使用图片标记，未完成小节可能没有进度圆环。
+        // 只检查当前小节，不能使用章节级别的图片或相邻小节的完成状态。
+        if (await _locator.Locator("img.finish-icon, image.finish-icon").CountAsync() > 0)
+            return 100;
         var progressPath = _locator
             .Locator(".progress-div .el-progress-circle__path")
             .First;

@@ -1,48 +1,13 @@
-﻿<UserControl xmlns="https://github.com/avaloniaui"
-             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-             mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="800"
-             xmlns:icons="clr-namespace:Material.Icons.Avalonia;assembly=Material.Icons.Avalonia"
-             xmlns:suki="clr-namespace:SukiUI.Controls;assembly=SukiUI"
-             xmlns:vm="using:Siua.ViewModels"
-             x:DataType="vm:AboutViewModel"
-             x:Class="Siua.Views.Pages.AboutView">
-    <suki:GlassCard Margin="150">
-        <StackPanel Margin="30" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="20">
-            <Image Source="../../Assets/siua.ico" Width="80" Height="80"/>
-            <TextBlock Text="Siua v1.1.6" FontSize="20" FontWeight="Bold" HorizontalAlignment="Center"/>
-            <TextBlock Text="基于PlayWright的自动化学习工具" FontSize="16"  HorizontalAlignment="Center" Foreground="{DynamicResource SukiLowText}" MaxWidth="400"/>
-            <Button  Classes="Basic" HorizontalAlignment="Center" Foreground="Black" ToolTip.Tip="作者">
-                <StackPanel Orientation="Horizontal" Spacing="5">
-                    <TextBlock Text="By：zxiyx"/>
-                </StackPanel>
-            </Button>
-            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="15">
-                <Button Classes="Basic">
-                    <StackPanel Orientation="Horizontal" Spacing="5">
-                        <TextBlock Text="QiFan"/>
-                    </StackPanel>
-                </Button>
-                <Button Classes="Basic">
-                    <StackPanel Orientation="Horizontal" Spacing="5">
-                        <TextBlock Text="BiliBIli"/>
-                    </StackPanel>
-                </Button>
-                <Button Classes="Basic">
-                    <StackPanel Orientation="Horizontal" Spacing="5">
-                        <TextBlock Text="GitHub"/>
-                    </StackPanel>
-                </Button>
-            </StackPanel>
-        </StackPanel>
-    </suki:GlassCard>
-    
-    
-    
-    
-    
-    
-    
-    
+<UserControl xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:vm="using:Siua.ViewModels"
+ x:Class="Siua.Views.Pages.AboutView" x:DataType="vm:AboutViewModel">
+ <ScrollViewer HorizontalScrollBarVisibility="Disabled"><StackPanel Margin="28,24" Spacing="24">
+  <StackPanel Spacing="6"><TextBlock Text="关于 Siua" Classes="web-title"/><TextBlock Text="一个清晰、可配置的学习工作区。" Classes="web-muted"/></StackPanel>
+  <Border Classes="panel" Padding="32"><StackPanel Spacing="24">
+   <Grid ColumnDefinitions="64,*" ColumnSpacing="22"><Image Source="../../Assets/siua.ico" Width="64" Height="64"/><StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="6"><TextBlock Text="Siua" FontSize="28" FontWeight="Bold"/><TextBlock Text="多平台课程学习助手 · v1.1.6" Classes="web-muted"/></StackPanel></Grid>
+   <Border Height="1" Background="{DynamicResource WebBorder}"/>
+   <TextBlock Text="将课程管理、账号登录、执行策略与运行日志集中在一个工作区。支持学习通和智慧树，按需使用 AI 与本地文字识别服务。" TextWrapping="Wrap" LineHeight="24" MaxWidth="700" HorizontalAlignment="Left"/>
+   <Grid ColumnDefinitions="*,*,*" ColumnSpacing="20"><StackPanel Spacing="7"><TextBlock Text="开发者" Classes="web-label"/><TextBlock Text="zxiyx"/></StackPanel><StackPanel Grid.Column="1" Spacing="7"><TextBlock Text="桌面框架" Classes="web-label"/><TextBlock Text="Avalonia + SukiUI"/></StackPanel><StackPanel Grid.Column="2" Spacing="7"><TextBlock Text="自动化引擎" Classes="web-label"/><TextBlock Text="Playwright"/></StackPanel></Grid>
+   <TextBlock Text="项目主页、交流社区及联系方式位于左侧底部。" Classes="web-muted"/>
+  </StackPanel></Border>
+ </StackPanel></ScrollViewer>
 </UserControl>

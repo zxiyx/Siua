@@ -25,6 +25,7 @@ public sealed class Pix2TextService : IDisposable
     private readonly GlobalSettings _settings;
     private readonly ILogService _logService;
     private readonly SemaphoreSlim _startLock = new(1, 1);
+    private readonly SemaphoreSlim _recognitionLock = new(1, 1);
     private readonly HttpClient _httpClient;
     private Pix2TextProcessService? _process;
     private readonly object _operationSync = new();
@@ -382,6 +383,13 @@ public sealed class Pix2TextService : IDisposable
     public async Task<string?> RecognizeAsync(
         byte[] imageBytes,
         CancellationToken cancellationToken = default)
+    {
+        await _recognitionLock.WaitAsync(cancellationToken);
+        try { return await RecognizeCoreAsync(imageBytes, cancellationToken); }
+        finally { _recognitionLock.Release(); }
+    }
+
+    private async Task<string?> RecognizeCoreAsync(byte[] imageBytes, CancellationToken cancellationToken)
     {
         if (imageBytes is not { Length: > 0 })
         {

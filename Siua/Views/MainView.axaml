@@ -1,67 +1,38 @@
-<suki:SukiWindow xmlns="https://github.com/avaloniaui"
-        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:vm="using:Siua.ViewModels"
-        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        xmlns:suki="clr-namespace:SukiUI.Controls;assembly=SukiUI"
-        xmlns:icons="clr-namespace:Material.Icons.Avalonia;assembly=Material.Icons.Avalonia"
-        mc:Ignorable="d" Width="1030" Height="720"
-        x:Class="Siua.Views.MainView"
-        x:DataType="vm:MainViewModel" Title="Siua - 多平台学习助手">
-        <suki:SukiWindow.Hosts>
-                <suki:SukiToastHost Manager="{Binding ToastManager}" />
-                <suki:SukiDialogHost Manager="{Binding DialogManager}" />
-        </suki:SukiWindow.Hosts>
-    <suki:SukiWindow.LogoContent>
-        <Image Width="20" Height="20" Source="../Assets/siua.ico"/>
-    </suki:SukiWindow.LogoContent>
-        <suki:SukiSideMenu ItemsSource="{Binding Pages}"
-                       SelectedItem="{Binding ActivePage}">
-        <suki:SukiSideMenu.ItemTemplate>
-            <DataTemplate>
-                <suki:SukiSideMenuItem Classes="Compact" Header="{Binding DisplayName}">
-                    <suki:SukiSideMenuItem.Icon>
-                        <icons:MaterialIcon Kind="{Binding Icon}" />
-                    </suki:SukiSideMenuItem.Icon>
-                </suki:SukiSideMenuItem>
-            </DataTemplate>
-        </suki:SukiSideMenu.ItemTemplate>
-        <suki:SukiSideMenu.HeaderContent>
-            <StackPanel>
-                <Image Classes="AppIcon" Source="../Assets/siua.ico"
-                       Width="80" Height="80" Margin="30,10,30,0"/>
-                <Label HorizontalAlignment="Center" Content="{Binding SiuaVersion}" FontSize="16" Foreground="{DynamicResource SukiLowText}" FontWeight="Bold" Margin="0,0,0,20"/>
-            </StackPanel>
-        </suki:SukiSideMenu.HeaderContent>
-        <suki:SukiSideMenu.FooterContent>
-            <StackPanel HorizontalAlignment="Center" Orientation="Horizontal">
-                <StackPanel.Styles>
-                    <Style Selector="Button">
-                        <Setter Property="Command" Value="{Binding OpenUrlCommand}" />
-                    </Style>
-                    <Style Selector="icons|MaterialIcon">
-                        <Setter Property="Width" Value="25" />
-                        <Setter Property="Height" Value="25" />
-                    </Style>
-                </StackPanel.Styles>
-                <Button Classes="Basic"
-                        CommandParameter="https://forum.qifan.net/"
-                        ToolTip.Tip="启帆社区">
-                    <icons:MaterialIcon Kind="Forum" />
-                </Button>
-                <Button Classes="Basic"
-                        CommandParameter="https://github.com/zxiyx/Siua"
-                        ToolTip.Tip="to my github">
-                    <icons:MaterialIcon Kind="Github" />
-                </Button>
-                <Button Classes="Basic"
-                        CommandParameter="mailto:xiaoqiu@foxmail.com?subject=Help"
-                        ToolTip.Tip="Send Email">
-                    <icons:MaterialIcon Kind="Email" />
-                </Button>
-            </StackPanel>
-        </suki:SukiSideMenu.FooterContent>
-    </suki:SukiSideMenu>
-        
-
+<suki:SukiWindow xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+  xmlns:vm="using:Siua.ViewModels" xmlns:co="using:Siua.Common" xmlns:suki="clr-namespace:SukiUI.Controls;assembly=SukiUI"
+  xmlns:icons="clr-namespace:Material.Icons.Avalonia;assembly=Material.Icons.Avalonia"
+  x:Class="Siua.Views.MainView" x:DataType="vm:MainViewModel" Width="1280" Height="860" MinWidth="1040" MinHeight="700" Title="Siua · 学习工作区">
+  <suki:SukiWindow.Hosts><suki:SukiToastHost Manager="{Binding ToastManager}"/><suki:SukiDialogHost Manager="{Binding DialogManager}"/></suki:SukiWindow.Hosts>
+  <Grid ColumnDefinitions="196,*" Background="{DynamicResource WebCanvas}">
+    <Border Background="{DynamicResource WebSurface}" BorderBrush="{DynamicResource WebBorder}" BorderThickness="0,0,1,0" Padding="16,22,16,16">
+      <Grid RowDefinitions="Auto,Auto,*,Auto">
+        <StackPanel Orientation="Horizontal" Spacing="10" Margin="8,0,0,30">
+          <Border Background="{DynamicResource WebAccent}" CornerRadius="8" Width="34" Height="34"><TextBlock Text="S" FontSize="24" FontWeight="Bold" Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
+          <StackPanel Spacing="1"><TextBlock Text="Siua" FontSize="21" FontWeight="Bold" Foreground="{DynamicResource WebText}"/><TextBlock Text="学习工作区" Classes="web-muted" FontSize="10"/></StackPanel>
+        </StackPanel>
+        <TextBlock Grid.Row="1" Text="工作空间" Classes="web-label" Margin="12,0,0,8" FontSize="10"/>
+        <ListBox Grid.Row="2" Classes="web-nav" ItemsSource="{Binding Navigation}" SelectedItem="{Binding SelectedNavigation}" VerticalAlignment="Top">
+          <ListBox.ItemTemplate><DataTemplate x:DataType="co:NavigationEntry"><StackPanel Orientation="Horizontal" Spacing="11"><icons:MaterialIcon Kind="{Binding Icon}" Width="18" Height="18"/><TextBlock Text="{Binding Title}" VerticalAlignment="Center"/></StackPanel></DataTemplate></ListBox.ItemTemplate>
+        </ListBox>
+        <StackPanel Grid.Row="3" Spacing="12">
+          <Border Height="1" Background="{DynamicResource WebBorder}"/>
+          <StackPanel Orientation="Horizontal" Spacing="5">
+            <Button Classes="web subtle" Padding="9" Command="{Binding OpenUrlCommand}" CommandParameter="https://github.com/zxiyx/Siua" ToolTip.Tip="GitHub"><icons:MaterialIcon Kind="Github" Width="18" Height="18"/></Button>
+            <Button Classes="web subtle" Padding="9" Command="{Binding OpenUrlCommand}" CommandParameter="https://forum.qifan.net/" ToolTip.Tip="启帆社区"><icons:MaterialIcon Kind="ForumOutline" Width="18" Height="18"/></Button>
+            <Button Classes="web subtle" Padding="9" Command="{Binding OpenUrlCommand}" CommandParameter="mailto:xiaoqiu@foxmail.com?subject=Help" ToolTip.Tip="联系作者"><icons:MaterialIcon Kind="EmailOutline" Width="18" Height="18"/></Button>
+          </StackPanel>
+          <TextBlock Text="{Binding SiuaVersion}" Classes="web-muted" FontSize="10" Margin="10,0"/>
+        </StackPanel>
+      </Grid>
+    </Border>
+    <Grid Grid.Column="1" RowDefinitions="52,*">
+      <Border Background="{DynamicResource WebSurface}" BorderBrush="{DynamicResource WebBorder}" BorderThickness="0,0,0,1" Padding="28,0">
+        <Grid ColumnDefinitions="*,Auto">
+          <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center"><TextBlock Text="工作空间" Classes="web-muted"/><TextBlock Text="/" Classes="web-muted"/><TextBlock Text="{Binding SelectedNavigation.Title}" FontSize="12"/></StackPanel>
+          <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="7" VerticalAlignment="Center"><Ellipse Fill="{DynamicResource WebSuccess}" Width="6" Height="6"/><TextBlock Text="本地工作区" Classes="web-muted"/></StackPanel>
+        </Grid>
+      </Border>
+      <ContentControl Grid.Row="1" Content="{Binding ActivePage}" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch"/>
+    </Grid>
+  </Grid>
 </suki:SukiWindow>

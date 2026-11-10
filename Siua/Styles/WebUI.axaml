@@ -1,0 +1,51 @@
+<Styles xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <Styles.Resources>
+    <!-- Primitive colours → semantic brushes → component styles. -->
+    <Color x:Key="Slate50">#F6F8FB</Color><Color x:Key="Slate200">#E5E9F0</Color>
+    <Color x:Key="Slate500">#738095</Color><Color x:Key="Slate900">#182230</Color>
+    <Color x:Key="Blue600">#2563EB</Color><Color x:Key="Blue50">#EBF2FF</Color>
+    <SolidColorBrush x:Key="WebCanvas" Color="{StaticResource Slate50}"/><SolidColorBrush x:Key="WebSurface" Color="White"/>
+    <SolidColorBrush x:Key="WebBorder" Color="{StaticResource Slate200}"/><SolidColorBrush x:Key="WebText" Color="{StaticResource Slate900}"/>
+    <SolidColorBrush x:Key="WebMuted" Color="{StaticResource Slate500}"/><SolidColorBrush x:Key="WebAccent" Color="{StaticResource Blue600}"/>
+    <SolidColorBrush x:Key="WebAccentSoft" Color="{StaticResource Blue50}"/>
+    <SolidColorBrush x:Key="WebSuccess" Color="#16846B"/><SolidColorBrush x:Key="WebDanger" Color="#C2414B"/>
+  </Styles.Resources>
+  <Style Selector="UserControl"><Setter Property="Foreground" Value="{DynamicResource WebText}"/><Setter Property="FontSize" Value="13"/></Style>
+  <Style Selector="TextBlock.web-title"><Setter Property="Margin" Value="0"/><Setter Property="FontSize" Value="25"/><Setter Property="FontWeight" Value="SemiBold"/><Setter Property="Foreground" Value="{DynamicResource WebText}"/></Style>
+  <Style Selector="TextBlock.web-section"><Setter Property="Margin" Value="0"/><Setter Property="FontSize" Value="15"/><Setter Property="FontWeight" Value="SemiBold"/></Style>
+  <Style Selector="TextBlock.web-muted"><Setter Property="Foreground" Value="{DynamicResource WebMuted}"/><Setter Property="FontSize" Value="12"/><Setter Property="TextWrapping" Value="Wrap"/></Style>
+  <Style Selector="TextBlock.web-label"><Setter Property="FontSize" Value="12"/><Setter Property="FontWeight" Value="Medium"/><Setter Property="Foreground" Value="{DynamicResource WebMuted}"/></Style>
+  <Style Selector="Border.panel"><Setter Property="Background" Value="{DynamicResource WebSurface}"/><Setter Property="BorderBrush" Value="{DynamicResource WebBorder}"/><Setter Property="BorderThickness" Value="1"/><Setter Property="CornerRadius" Value="10"/><Setter Property="Padding" Value="22"/></Style>
+  <Style Selector="Border.badge"><Setter Property="Background" Value="{DynamicResource WebAccentSoft}"/><Setter Property="CornerRadius" Value="5"/><Setter Property="Padding" Value="9,4"/></Style>
+  <Style Selector="Button.web">
+    <Setter Property="Background" Value="{DynamicResource WebSurface}"/><Setter Property="Foreground" Value="{DynamicResource WebText}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource WebBorder}"/><Setter Property="BorderThickness" Value="1"/>
+    <Setter Property="CornerRadius" Value="6"/><Setter Property="Padding" Value="14,9"/><Setter Property="MinHeight" Value="36"/>
+    <Setter Property="HorizontalContentAlignment" Value="Center"/><Setter Property="VerticalContentAlignment" Value="Center"/>
+    <Setter Property="Template"><ControlTemplate><Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="{TemplateBinding CornerRadius}" Padding="{TemplateBinding Padding}">
+      <ContentPresenter Background="Transparent" TextElement.Foreground="{TemplateBinding Foreground}" Content="{TemplateBinding Content}" ContentTemplate="{TemplateBinding ContentTemplate}" HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" VerticalAlignment="{TemplateBinding VerticalContentAlignment}"/>
+    </Border></ControlTemplate></Setter>
+  </Style>
+  <Style Selector="Button.web:pointerover"><Setter Property="Background" Value="{DynamicResource WebCanvas}"/><Setter Property="BorderBrush" Value="{DynamicResource WebAccent}"/></Style>
+  <Style Selector="Button.web:disabled"><Setter Property="Opacity" Value="0.45"/></Style>
+  <Style Selector="Button.web:focus-visible"><Setter Property="BorderBrush" Value="{DynamicResource WebAccent}"/><Setter Property="BorderThickness" Value="2"/></Style>
+  <Style Selector="Button.web.primary"><Setter Property="Background" Value="{DynamicResource WebAccent}"/><Setter Property="Foreground" Value="White"/><Setter Property="BorderBrush" Value="{DynamicResource WebAccent}"/></Style>
+  <Style Selector="Button.web.primary:pointerover"><Setter Property="Opacity" Value="0.88"/></Style>
+  <Style Selector="Button.web.subtle"><Setter Property="Background" Value="Transparent"/><Setter Property="BorderThickness" Value="0"/><Setter Property="Foreground" Value="{DynamicResource WebMuted}"/></Style>
+  <Style Selector="Button.web.danger"><Setter Property="Foreground" Value="{DynamicResource WebDanger}"/></Style>
+  <Style Selector="TextBox"><Setter Property="CornerRadius" Value="6"/><Setter Property="MinHeight" Value="36"/></Style>
+  <Style Selector="ComboBox"><Setter Property="CornerRadius" Value="6"/><Setter Property="MinHeight" Value="36"/></Style>
+  <Style Selector="ListBox.web-nav"><Setter Property="Background" Value="Transparent"/><Setter Property="BorderThickness" Value="0"/><Setter Property="Padding" Value="0"/></Style>
+  <Style Selector="ListBox.web-nav ListBoxItem">
+    <Setter Property="Padding" Value="12,11"/><Setter Property="Margin" Value="0,3"/><Setter Property="Background" Value="Transparent"/><Setter Property="Foreground" Value="{DynamicResource WebMuted}"/>
+    <Setter Property="Template"><ControlTemplate><Border Background="{TemplateBinding Background}" CornerRadius="6" Padding="{TemplateBinding Padding}"><ContentControl Background="Transparent" Foreground="{TemplateBinding Foreground}" Content="{TemplateBinding Content}" ContentTemplate="{TemplateBinding ContentTemplate}" HorizontalContentAlignment="Stretch"/></Border></ControlTemplate></Setter>
+  </Style>
+  <Style Selector="ListBox.web-nav ListBoxItem:pointerover"><Setter Property="Background" Value="{DynamicResource WebCanvas}"/></Style>
+  <Style Selector="ListBox.web-nav ListBoxItem:selected"><Setter Property="Background" Value="{DynamicResource WebAccentSoft}"/><Setter Property="Foreground" Value="{DynamicResource WebAccent}"/><Setter Property="FontWeight" Value="SemiBold"/></Style>
+  <Style Selector="TabControl.web-tabs TabItem">
+    <Setter Property="Padding" Value="4,12"/><Setter Property="Margin" Value="0,0,24,0"/><Setter Property="Foreground" Value="{DynamicResource WebMuted}"/><Setter Property="BorderBrush" Value="Transparent"/>
+    <Setter Property="Template"><ControlTemplate><Border BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="0,0,0,2" Padding="{TemplateBinding Padding}"><ContentPresenter Content="{TemplateBinding Header}"/></Border></ControlTemplate></Setter>
+  </Style>
+  <Style Selector="TabControl.web-tabs TabItem:selected"><Setter Property="Foreground" Value="{DynamicResource WebAccent}"/><Setter Property="BorderBrush" Value="{DynamicResource WebAccent}"/><Setter Property="FontWeight" Value="SemiBold"/></Style>
+  <Style Selector="TabControl.web-tabs TabItem:pointerover"><Setter Property="Foreground" Value="{DynamicResource WebAccent}"/></Style>
+</Styles>

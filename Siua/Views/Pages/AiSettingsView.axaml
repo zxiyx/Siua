@@ -1,117 +1,23 @@
-﻿<UserControl xmlns="https://github.com/avaloniaui"
-             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-             xmlns:vm="using:Siua.ViewModels"
-             xmlns:views="using:Siua.Views"
-             xmlns:co="using:Siua.Common"
-             xmlns:suki="https://github.com/kikipoulet/SukiUI"
-             xmlns:icons="clr-namespace:Material.Icons.Avalonia;assembly=Material.Icons.Avalonia"
-             mc:Ignorable="d" d:DesignWidth="920" d:DesignHeight="720"
-             x:Class="Siua.Views.Pages.AiSettingsView"
-             x:DataType="vm:AiSettingsViewModel">
-    <UserControl.Resources>
-        <co:StringEqualsConverter x:Key="ProviderToBool"/>
-    </UserControl.Resources>
-
-    <ScrollViewer HorizontalScrollBarVisibility="Disabled">
-        <StackPanel Margin="26" Spacing="18" MaxWidth="940" HorizontalAlignment="Stretch">
-            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
-                <Button Classes="Flat Icon" Width="38" Height="38" Command="{Binding CloseCommand}"
-                        ToolTip.Tip="返回设置">
-                    <icons:MaterialIcon Kind="ArrowLeft" Width="22" Height="22"/>
-                </Button>
-                <StackPanel Grid.Column="1" Spacing="3" VerticalAlignment="Center">
-                    <TextBlock Text="AI 模型设置" FontSize="27" FontWeight="SemiBold"/>
-                    <TextBlock Text="连接用于章节答题的模型服务"
-                               FontSize="14" Foreground="{DynamicResource SukiLowText}"/>
-                </StackPanel>
-            </Grid>
-
-            <suki:InfoBar Message="{Binding ConnectionInfoMessage}"
-                          co:InfoBarExtensions.Severity="{Binding ConnectionInfoSeverity}" IsClosable="True"
-                          IsOpen="{Binding IsConnectionInfoOpen, Mode=TwoWay}"
-                          IsVisible="{Binding IsConnectionInfoOpen}"/>
-
-            <suki:GlassCard CornerRadius="14">
-                <StackPanel Spacing="14">
-                    <StackPanel Orientation="Horizontal" Spacing="9">
-                        <icons:MaterialIcon Kind="Cloud" Width="22" Height="22"
-                                            Foreground="{DynamicResource SukiPrimaryColor}"/>
-                        <TextBlock Text="服务商" FontSize="17" FontWeight="SemiBold"/>
-                    </StackPanel>
-                    <WrapPanel>
-                        <RadioButton Width="138" Height="58" Margin="0,0,9,9" Classes="GigaChips" Content="DeepSeek" GroupName="AiProvider"
-                                     IsChecked="{Binding SelectedProvider, Converter={StaticResource ProviderToBool}, ConverterParameter=DeepSeek}"/>
-                        <RadioButton Width="138" Height="58" Margin="0,0,9,9" Classes="GigaChips" Content="阿里 Qwen" GroupName="AiProvider"
-                                     IsChecked="{Binding SelectedProvider, Converter={StaticResource ProviderToBool}, ConverterParameter=阿里Qwen}"/>
-                        <RadioButton Width="138" Height="58" Margin="0,0,9,9" Classes="GigaChips" Content="Kimi" GroupName="AiProvider"
-                                     IsChecked="{Binding SelectedProvider, Converter={StaticResource ProviderToBool}, ConverterParameter=Kimi}"/>
-                        <RadioButton Width="138" Height="58" Margin="0,0,9,9" Classes="GigaChips" Content="腾讯混元" GroupName="AiProvider"
-                                     IsChecked="{Binding SelectedProvider, Converter={StaticResource ProviderToBool}, ConverterParameter=腾讯混元}"/>
-                        <RadioButton Width="138" Height="58" Margin="0,0,9,0" Classes="GigaChips" Content="豆包" GroupName="AiProvider"
-                                     IsChecked="{Binding SelectedProvider, Converter={StaticResource ProviderToBool}, ConverterParameter=豆包}"/>
-                        <RadioButton Width="138" Height="58" Margin="0,0,9,0" Classes="GigaChips" Content="自定义" GroupName="AiProvider"
-                                     IsChecked="{Binding SelectedProvider, Converter={StaticResource ProviderToBool}, ConverterParameter=自定义}"/>
-                    </WrapPanel>
-                </StackPanel>
-            </suki:GlassCard>
-
-            <suki:GlassCard CornerRadius="14">
-                <suki:BusyArea IsBusy="{Binding IsAdding}">
-                    <Grid ColumnDefinitions="230,*" ColumnSpacing="28">
-                        <StackPanel Spacing="10">
-                            <icons:MaterialIcon Kind="Key" Width="38" Height="38"
-                                                Foreground="{DynamicResource SukiPrimaryColor}"/>
-                            <TextBlock Text="连接信息" FontSize="19" FontWeight="SemiBold"/>
-                            <TextBlock Text="选择预设服务商后，接口地址会自动匹配；自定义服务支持填写 OpenAI 兼容地址。"
-                                       TextWrapping="Wrap" FontSize="13" LineHeight="20"
-                                       Foreground="{DynamicResource SukiLowText}"/>
-                            <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,6,0,0">
-                                <icons:MaterialIcon Kind="CheckCircle" Width="16" Height="16"
-                                                    Foreground="{DynamicResource SukiPrimaryColor}"/>
-                                <TextBlock Text="配置更改后自动保存" FontSize="12"
-                                           Foreground="{DynamicResource SukiPrimaryColor}"/>
-                            </StackPanel>
-                        </StackPanel>
-
-                        <StackPanel Grid.Column="1" Spacing="12">
-                            <StackPanel IsVisible="{Binding IsCustom}" Spacing="5">
-                                <TextBlock Text="接口地址" FontWeight="SemiBold" Margin="5,0,0,0"/>
-                                <TextBox suki:TextBoxExtensions.Prefix="{icons:MaterialIconExt Kind=Cloud}"
-                                         Classes="clearButton" Text="{Binding Settings.CurrentAi.Domain}"
-                                         Watermark="例如：https://api.example.com/v1"/>
-                            </StackPanel>
-                            <StackPanel Spacing="5">
-                                <TextBlock Text="API Key" FontWeight="SemiBold" Margin="5,0,0,0"/>
-                                <TextBox suki:TextBoxExtensions.Prefix="{icons:MaterialIconExt Kind=Key}"
-                                         Classes="clearButton" Text="{Binding Settings.CurrentAi.ApiKey}"
-                                         PasswordChar="●"
-                                         Watermark="请输入服务商提供的 API Key"/>
-                            </StackPanel>
-                            <StackPanel Spacing="5">
-                                <TextBlock Text="模型名称" FontWeight="SemiBold" Margin="5,0,0,0"/>
-                                <TextBox suki:TextBoxExtensions.Prefix="{icons:MaterialIconExt Kind=RobotLove}"
-                                         Classes="clearButton" Text="{Binding Settings.CurrentAi.ModelName}"
-                                         Watermark="例如：deepseek-chat"/>
-                            </StackPanel>
-                        </StackPanel>
-                    </Grid>
-                </suki:BusyArea>
-            </suki:GlassCard>
-
-            <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
-                <TextBlock Text="API Key 仅保存在本机配置文件中"
-                           FontSize="12" VerticalAlignment="Center"
-                           Foreground="{DynamicResource SukiLowText}"/>
-                <Button Grid.Column="1" Classes="Flat" MinWidth="140" Content="检测连通"
-                        Command="{Binding TestApiConnectionCommand}"
-                        suki:ButtonExtensions.Icon="{icons:MaterialIconExt Kind=Speedometer}"
-                        suki:ButtonExtensions.ShowProgress="{Binding IsTestingConnection}"/>
-                <Button Grid.Column="2" Classes="Flat" MinWidth="108" Content="完成"
-                        Command="{Binding CloseCommand}"
-                        suki:ButtonExtensions.Icon="{icons:MaterialIconExt Kind=Check}"/>
-            </Grid>
-        </StackPanel>
-    </ScrollViewer>
+<UserControl xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+ xmlns:vm="using:Siua.ViewModels" xmlns:co="using:Siua.Common" xmlns:suki="https://github.com/kikipoulet/SukiUI"
+ x:Class="Siua.Views.Pages.AiSettingsView" x:DataType="vm:AiSettingsViewModel">
+ <ScrollViewer HorizontalScrollBarVisibility="Disabled"><StackPanel Margin="28,24" Spacing="24">
+  <StackPanel Spacing="6"><TextBlock Text="AI 模型" Classes="web-title"/><TextBlock Text="连接模型服务，为课程答题提供分析能力。" Classes="web-muted"/></StackPanel>
+  <suki:InfoBar Message="{Binding ConnectionInfoMessage}" co:InfoBarExtensions.Severity="{Binding ConnectionInfoSeverity}" IsClosable="True" IsOpen="{Binding IsConnectionInfoOpen, Mode=TwoWay}" IsVisible="{Binding IsConnectionInfoOpen}"/>
+  <Border Classes="panel">
+   <Grid ColumnDefinitions="230,*" ColumnSpacing="40">
+    <StackPanel Spacing="9"><TextBlock Text="模型连接" Classes="web-section"/><TextBlock Text="选择服务商并填写连接信息。修改会自动保存到本机。" Classes="web-muted"/><Border Classes="badge" HorizontalAlignment="Left" Margin="0,8,0,0"><TextBlock Text="支持自定义兼容接口" FontSize="11" Foreground="{DynamicResource WebAccent}"/></Border></StackPanel>
+    <StackPanel Grid.Column="1" Spacing="20" MaxWidth="560" HorizontalAlignment="Stretch">
+     <StackPanel Spacing="7"><TextBlock Text="服务商" Classes="web-label"/><ComboBox ItemsSource="{Binding Providers}" SelectedItem="{Binding SelectedProvider}" HorizontalAlignment="Stretch"/></StackPanel>
+     <StackPanel Spacing="7" IsVisible="{Binding IsCustom}"><TextBlock Text="接口地址" Classes="web-label"/><TextBox Text="{Binding Settings.CurrentAi.Domain}" PlaceholderText="https://api.example.com/v1"/></StackPanel>
+     <StackPanel Spacing="7"><TextBlock Text="API Key" Classes="web-label"/><TextBox Text="{Binding Settings.CurrentAi.ApiKey}" PasswordChar="●" PlaceholderText="输入服务商提供的 API Key"/></StackPanel>
+     <StackPanel Spacing="7"><TextBlock Text="模型名称" Classes="web-label"/><TextBox Text="{Binding Settings.CurrentAi.ModelName}" PlaceholderText="例如：deepseek-chat"/></StackPanel>
+     <Border Height="1" Background="{DynamicResource WebBorder}"/>
+     <Grid ColumnDefinitions="*,Auto" ColumnSpacing="14"><TextBlock Text="API Key 仅保存在本机配置中" Classes="web-muted" VerticalAlignment="Center"/><Button Grid.Column="1" Classes="web primary" Content="检测连通" Command="{Binding TestApiConnectionCommand}" IsEnabled="{Binding !IsTestingConnection}"/></Grid>
+     <TextBlock Text="正在检测连接…" IsVisible="{Binding IsTestingConnection}" Classes="web-muted"/>
+    </StackPanel>
+   </Grid>
+  </Border>
+  <Border Classes="panel"><Grid ColumnDefinitions="230,*" ColumnSpacing="40"><StackPanel Spacing="9"><TextBlock Text="答题方式" Classes="web-section"/><TextBlock Text="执行策略位于工作台的策略页签。" Classes="web-muted"/></StackPanel><StackPanel Grid.Column="1" Spacing="10"><TextBlock Text="自动答题使用这里配置的模型；文字识别由 Pix2Text 完成。" Classes="web-muted"/><TextBlock Text="随机答题不依赖 AI 模型。验证码和二次验证仍需手动完成。" Classes="web-muted"/></StackPanel></Grid></Border>
+ </StackPanel></ScrollViewer>
 </UserControl>

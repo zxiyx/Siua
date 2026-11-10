@@ -22,6 +22,7 @@ public sealed class XxtRunner
     private readonly ILogService _logService;
     private readonly Pix2TextService _ocrService;
     private readonly AiControlService _aiControlService;
+    public bool CompletedSuccessfully { get; private set; }
 
     public XxtRunner(
         IPage page,
@@ -39,6 +40,7 @@ public sealed class XxtRunner
 
     public async Task<bool> RunAsync(CancellationToken cancellationToken = default)
     {
+        CompletedSuccessfully = false;
         XxtChapterContext? chapter = null;
         try
         {
@@ -76,7 +78,10 @@ public sealed class XxtRunner
                     chapterToken.ThrowIfCancellationRequested();
                     chapter.StopObserving();
                 }))
+            {
+                CompletedSuccessfully = resolver.ReachedCourseEnd;
                 return false;
+            }
             LogInfo("已进入下一节");
             await Task.Delay(_settings.ChapterJumpInterval, cancellationToken);
             return true;

@@ -18,6 +18,9 @@ public partial class LogViewModel :PageBase
     [ObservableProperty] private bool _showInfo = true;
     [ObservableProperty] private bool _showError = true;
     [ObservableProperty] private bool _showBrowser = false;
+    public ObservableCollection<string> TaskFilters { get; } = ["全部任务"];
+    [ObservableProperty] private string _selectedTaskFilter = "全部任务";
+    partial void OnSelectedTaskFilterChanged(string value) => RefreshFilter();
     public AvaloniaList<LogEntry> AllLogs { get; } = new();
     public ObservableCollection<LogEntry> Logs { get; } = new();
     
@@ -30,6 +33,7 @@ public partial class LogViewModel :PageBase
             Dispatcher.UIThread.Post(() =>
             {
                 AllLogs.Add(entry);
+                if (entry.TaskLabel is not null && !TaskFilters.Contains(entry.TaskLabel)) TaskFilters.Add(entry.TaskLabel);
                 if (AllLogs.Count > MaxLogs) AllLogs.RemoveAt(0);
                 if (MatchesFilter(entry))
                 {
@@ -44,6 +48,9 @@ public partial class LogViewModel :PageBase
             {
                 AllLogs.Clear();
                 Logs.Clear();
+                TaskFilters.Clear();
+                TaskFilters.Add("全部任务");
+                SelectedTaskFilter = "全部任务";
             });
         };
     }
@@ -67,7 +74,7 @@ public partial class LogViewModel :PageBase
             _ => true
         };
         if (!levelOk) return false;
-        return true;
+        return SelectedTaskFilter == "全部任务" || e.TaskLabel == SelectedTaskFilter;
     }
 
     [RelayCommand]

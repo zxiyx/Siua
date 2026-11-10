@@ -16,6 +16,8 @@ public sealed class LogEntry
     public LogLevel Level { get; init; } = LogLevel.Info;
     public string Source { get; init; } = "App";
     public string Message { get; init; } = string.Empty;
+    public string? TaskLabel { get; init; }
+    public string DisplayMessage => TaskLabel is null ? Message : $"[{TaskLabel}] {Message}";
 
     public string LevelText => Level switch
     {

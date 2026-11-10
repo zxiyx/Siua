@@ -73,6 +73,8 @@ public  partial class App : Application
         services.AddSingleton<ApiConnectionService>();
         services.AddSingleton<ILogService,LogService>();
         services.AddSingleton<ICoreService,CoreService>();
+        services.AddSingleton<CourseTaskScheduler>(sp => new CourseTaskScheduler(sp.GetRequiredService<GlobalSettings>(),
+            sp.GetRequiredService<ILogService>(), sp.GetRequiredService<Pix2TextService>()));
         services.AddSingleton<IShowWindowManager, ShowWindowService>();
         services.AddSingleton<ISukiToastManager, SukiToastManager>();
         services.AddSingleton<ISukiDialogManager, SukiDialogManager>();

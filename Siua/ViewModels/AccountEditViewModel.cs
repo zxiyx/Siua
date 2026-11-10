@@ -17,6 +17,7 @@ public partial class AccountEditViewModel : ViewModelBase
     public Action? RequestClose;
     private readonly ILogService _logService;
     public GlobalSettings Settings { get; }
+    public string[] Platforms { get; } = [LearningPlatformCatalog.XueXiTong, LearningPlatformCatalog.ZhiHuiShu];
     public ObservableCollection<LoginAccount> Accounts { get; } = [];
     [ObservableProperty] private LoginAccount? _selectedAccount;
     // TextBox 清空时可回传 null，不能仅依赖字段的初始空字符串。
@@ -24,11 +25,15 @@ public partial class AccountEditViewModel : ViewModelBase
     [ObservableProperty] private string? _username = "";
     [ObservableProperty] private string? _password = "";
     [ObservableProperty] private bool _isSaving;
+    [ObservableProperty] private bool _rememberLogin;
+    public string LoginStateText => SelectedAccount is null ? "保存账号后，首次登录成功时记录登录状态"
+        : Settings.LoginStates.SavedAt(SelectedAccount) is { } time
+            ? $"已保存 · {time:yyyy-MM-dd HH:mm}（有效性以实际登录为准）" : "尚未保存登录状态";
     [ObservableProperty] private bool _isInfoOpen;
     [ObservableProperty] private string _infoMessage = "";
     [ObservableProperty] private NotificationType _infoSeverity = NotificationType.Information;
     public string EditorTitle => SelectedAccount is null ? "添加账号" : "编辑账号";
-    public string PasswordHint => SelectedAccount is null ? "填写登录密码" : "留空则保留已保存的密码";
+    public string PasswordHint => SelectedAccount is null ? "密码（仅记住登录状态时可留空）" : "留空则保留已保存的密码";
     public string PlatformHint => Settings.CurrentPlatform == LearningPlatformCatalog.XueXiTong
         ? "手机号或超星号登录；验证码、二次验证需在浏览器中完成。"
         : "手机号或用户名登录；自动勾选协议，验证码需在浏览器中手动完成。";
@@ -36,6 +41,7 @@ public partial class AccountEditViewModel : ViewModelBase
     public AccountEditViewModel(GlobalSettings settings, ILogService? logService = null)
     {
         Settings = settings;
+        Settings.LoginStates.Changed += () => Avalonia.Threading.Dispatcher.UIThread.Post(() => OnPropertyChanged(nameof(LoginStateText)));
         _logService = logService ?? new LogService();
         Settings.Accounts.CollectionChanged += (_, _) => RefreshAccounts();
         Settings.PropertyChanged += (_, args) =>
@@ -61,6 +67,9 @@ public partial class AccountEditViewModel : ViewModelBase
         AccountName = value?.Name ?? "";
         Username = value?.Username ?? "";
         Password = "";
+        RememberLogin = value?.RememberLogin ?? false;
+        OnPropertyChanged(nameof(LoginStateText));
+        ClearLoginStateCommand.NotifyCanExecuteChanged();
         IsInfoOpen = false;
         OnPropertyChanged(nameof(EditorTitle));
         OnPropertyChanged(nameof(PasswordHint));
@@ -69,16 +78,18 @@ public partial class AccountEditViewModel : ViewModelBase
     }
     partial void OnUsernameChanged(string? value) => SaveAccountCommand.NotifyCanExecuteChanged();
     partial void OnPasswordChanged(string? value) => SaveAccountCommand.NotifyCanExecuteChanged();
+    partial void OnRememberLoginChanged(bool value) => SaveAccountCommand.NotifyCanExecuteChanged();
     partial void OnIsSavingChanged(bool value)
     {
         SaveAccountCommand.NotifyCanExecuteChanged();
         DeleteAccountCommand.NotifyCanExecuteChanged();
         NewAccountCommand.NotifyCanExecuteChanged();
         CloseCommand.NotifyCanExecuteChanged();
+        ClearLoginStateCommand.NotifyCanExecuteChanged();
     }
     private bool CanEdit() => !IsSaving;
     private bool CanSave() => !IsSaving && !string.IsNullOrWhiteSpace(Username) &&
-        (!string.IsNullOrEmpty(Password) || SelectedAccount is not null);
+        (!string.IsNullOrEmpty(Password) || RememberLogin || SelectedAccount is not null);
     private bool CanDelete() => !IsSaving && SelectedAccount is not null;
 
     [RelayCommand(CanExecute = nameof(CanEdit))]
@@ -86,6 +97,7 @@ public partial class AccountEditViewModel : ViewModelBase
     {
         SelectedAccount = null;
         AccountName = Username = Password = "";
+        RememberLogin = false;
         IsInfoOpen = false;
     }
 
@@ -105,18 +117,19 @@ public partial class AccountEditViewModel : ViewModelBase
             return;
         }
         IsSaving = true;
-        var stage = "密码加密";
+        var stage = "账号准备";
         try
         {
-            var encryptedPassword = password.Length > 0
-                ? AccountPasswordService.Protect(password) : selected!.EncryptedPassword;
+            var savedPassword = password.Length > 0 ? password : selected?.Password ?? "";
             stage = "账号保存";
             var account = new LoginAccount
             {
                 Id = selected?.Id ?? Guid.NewGuid().ToString("N"),
                 Platform = platform, Name = name, Username = username,
-                EncryptedPassword = encryptedPassword
+                Password = savedPassword, RememberLogin = RememberLogin
             };
+            if (selected is not null && (selected.Username != username || !RememberLogin || password.Length > 0))
+                Settings.LoginStates.Clear(selected);
             var index = selected is null ? -1 : Settings.Accounts.IndexOf(selected);
             if (index < 0) Settings.Accounts.Add(account);
             else Settings.Accounts[index] = account;
@@ -152,6 +165,7 @@ public partial class AccountEditViewModel : ViewModelBase
         IsSaving = true;
         try
         {
+            Settings.LoginStates.Clear(account);
             Settings.Accounts.Remove(account);
             NewAccount();
             await Settings.SaveToJson();
@@ -164,6 +178,19 @@ public partial class AccountEditViewModel : ViewModelBase
     }
 
     public void ResetEditor() => NewAccount();
+
+    [RelayCommand(CanExecute = nameof(CanDelete))]
+    private void ClearLoginState()
+    {
+        if (SelectedAccount is null) return;
+        try
+        {
+            Settings.LoginStates.Clear(SelectedAccount);
+            OnPropertyChanged(nameof(LoginStateText));
+            ShowInfo("已清除登录状态；正在运行的旧会话不会重新保存", NotificationType.Success);
+        }
+        catch { ShowInfo("清除失败，请检查应用数据目录是否可写", NotificationType.Error); }
+    }
 
     [RelayCommand(CanExecute = nameof(CanEdit))]
     private void Close()

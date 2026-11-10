@@ -16,6 +16,7 @@ namespace Siua.ViewModels;
 public partial class CourseEditViewModel:ViewModelBase
 {
     public Action? RequestClose;
+    public string[] Platforms { get; } = [LearningPlatformCatalog.XueXiTong, LearningPlatformCatalog.ZhiHuiShu];
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(RemoveCourseCommand))]
     private string? _selectedCourse;

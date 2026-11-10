@@ -3,12 +3,21 @@ using Siua.Common;
 using System.IO;
 using System.Security;
 using System.Text;
+using System.Threading;
 using Siua.Interfaces;
 namespace Siua.Services;
 
 /// <summary>集中记录并分发应用运行日志。</summary>
 public class LogService:ILogService
 {
+    private static readonly AsyncLocal<string?> TaskContext = new();
+    public static IDisposable BeginTask(string label)
+    {
+        var previous = TaskContext.Value;
+        TaskContext.Value = label;
+        return new Scope(() => TaskContext.Value = previous);
+    }
+    private sealed class Scope(Action close) : IDisposable { public void Dispose() => close(); }
     private static readonly object ErrorFileLock = new();
     private readonly string _errorLogPath;
 
@@ -42,7 +51,7 @@ public class LogService:ILogService
                 {
                     Directory.CreateDirectory(Path.GetDirectoryName(_errorLogPath)!);
                     File.AppendAllText(_errorLogPath,
-                        $"[{time:yyyy-MM-dd HH:mm:ss.fff}] [Error] [{source}]{Environment.NewLine}" +
+                        $"[{time:yyyy-MM-dd HH:mm:ss.fff}] [Error] [{source}] [{TaskContext.Value}]{Environment.NewLine}" +
                         message + Environment.NewLine + new string('-', 72) + Environment.NewLine,
                         new UTF8Encoding(false));
                 }
@@ -60,6 +69,7 @@ public class LogService:ILogService
             Time = time,
             Level = level,
             Source = source,
+            TaskLabel = TaskContext.Value,
             Message = message
         };
         OnLogAdded?.Invoke(entry);

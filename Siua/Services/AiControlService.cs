@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using System.Threading;
 using OpenAI;
 using OpenAI.Chat;
 using Siua.Common;
@@ -15,11 +16,14 @@ public class AiControlService
 {
     private readonly GlobalSettings _globalSettings;
     private readonly ILogService _logService;
+    private static readonly SemaphoreSlim RequestGate = new(2, 2);
+    private readonly CancellationToken _cancellationToken;
 
-    public AiControlService(GlobalSettings globalSettings, ILogService logService)
+    public AiControlService(GlobalSettings globalSettings, ILogService logService, CancellationToken cancellationToken = default)
     {
         _globalSettings = globalSettings;
         _logService = logService;
+        _cancellationToken = cancellationToken;
     }
 
     public Task<string?> GetAnswer(string question) => GetAnswerAsync(
@@ -61,6 +65,13 @@ public class AiControlService
 
     private async Task<string?> GetAnswerAsync(string question, string systemPrompt)
     {
+        await RequestGate.WaitAsync(_cancellationToken);
+        try { return await GetAnswerCoreAsync(question, systemPrompt); }
+        finally { RequestGate.Release(); }
+    }
+
+    private async Task<string?> GetAnswerCoreAsync(string question, string systemPrompt)
+    {
         using var client = CreateClient();
         if (client is null)
         {
@@ -75,9 +86,10 @@ public class AiControlService
                 new(Role.User, question)
             };
             var request = new ChatRequest(messages, _globalSettings.CurrentAi.ModelName, temperature: 0.1, frequencyPenalty: 0);
-            var response = await client.ChatEndpoint.GetCompletionAsync(request);
+            var response = await client.ChatEndpoint.GetCompletionAsync(request, cancellationToken: _cancellationToken);
             return response.FirstChoice.Message.Content.ToString();
         }
+        catch (OperationCanceledException) when (_cancellationToken.IsCancellationRequested) { throw; }
         catch (Exception exception)
         {
             _logService.AddLog(LogLevel.Error, "AI", $"获取答案失败：{exception}");

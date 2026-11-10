@@ -8,6 +8,8 @@ namespace Siua.Common;
 internal sealed class SettingsSnapshot
 {
     public string CurrentPlatform { get; set; } = "学习通";
+    public bool MultiCourseMode { get; set; }
+    public int MaxConcurrentCourses { get; set; } = 2;
     public string Pix2TextExecutablePath { get; set; } = Path.Combine("Pix2TextRuntime", "Scripts", "p2t.exe");
     public string Pix2TextHost { get; set; } = "127.0.0.1";
     public int Pix2TextPort { get; set; } = 8503;

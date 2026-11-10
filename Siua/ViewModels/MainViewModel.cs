@@ -8,6 +8,7 @@ using System.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Siua.Interfaces;
+using Material.Icons;
 using SukiUI.Dialogs;
 using SukiUI.Toasts;
 
@@ -23,6 +24,18 @@ public partial class MainViewModel : ViewModelBase
     
     [ObservableProperty] private string _siuaVersion = "Siua v1.1.6";
     [ObservableProperty] private PageBase? _activePage;
+    public NavigationEntry[] Navigation { get; } =
+    [
+        new("start", "工作台", MaterialIconKind.ViewDashboardOutline),
+        new("logs", "运行日志", MaterialIconKind.TextBoxOutline),
+        new("courses", "课程管理", MaterialIconKind.BookOpenVariant),
+        new("accounts", "账号与登录", MaterialIconKind.AccountOutline),
+        new("ai", "AI 模型", MaterialIconKind.RobotOutline),
+        new("settings", "偏好设置", MaterialIconKind.CogOutline),
+        new("about", "关于 Siua", MaterialIconKind.InformationOutline)
+    ];
+    [ObservableProperty] private NavigationEntry? _selectedNavigation;
+    private bool _navigating;
     
     private readonly ILogService _log;
 
@@ -39,11 +52,52 @@ public partial class MainViewModel : ViewModelBase
             var page = Pages.FirstOrDefault(x => x.GetType() == pageType);
             if (page is null || ActivePage?.GetType() == pageType) return;
             ActivePage = page;
+            SyncNavigation();
         };
         ActivePage = Pages.FirstOrDefault();
+        if (Pages.OfType<SettingsViewModel>().FirstOrDefault() is { } settings)
+            settings.PropertyChanged += (_, args) => { if (args.PropertyName == nameof(SettingsViewModel.ActiveSubPage)) SyncNavigation(); };
+        SyncNavigation();
         _log.AddLog("Run Successfully !");
     }
     
+    partial void OnSelectedNavigationChanged(NavigationEntry? value)
+    {
+        if (_navigating || value is null) return;
+        _navigating = true;
+        try
+        {
+            if (value.Key == "start") ActivePage = Pages.OfType<StartViewModel>().FirstOrDefault();
+            else if (value.Key == "logs") ActivePage = Pages.OfType<LogViewModel>().FirstOrDefault();
+            else if (value.Key == "about") ActivePage = Pages.OfType<AboutViewModel>().FirstOrDefault();
+            else if (Pages.OfType<SettingsViewModel>().FirstOrDefault() is { } settings)
+            {
+                ActivePage = settings;
+                settings.ActiveSubPage = value.Key switch
+                {
+                    "courses" => settings.CourseEditor, "accounts" => settings.AccountEditor,
+                    "ai" => settings.AiSettings, _ => null
+                };
+            }
+        }
+        finally { _navigating = false; }
+    }
+
+    private void SyncNavigation()
+    {
+        if (_navigating) return;
+        var key = ActivePage switch
+        {
+            StartViewModel => "start", LogViewModel => "logs", AboutViewModel => "about",
+            SettingsViewModel s => s.ActiveSubPage switch
+            { CourseEditViewModel => "courses", AccountEditViewModel => "accounts", AiSettingsViewModel => "ai", _ => "settings" },
+            _ => "start"
+        };
+        _navigating = true;
+        SelectedNavigation = Navigation.First(item => item.Key == key);
+        _navigating = false;
+    }
+
     [RelayCommand]
     private void OpenUrl(string url)
     {

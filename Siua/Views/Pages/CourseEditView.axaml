@@ -1,92 +1,26 @@
-﻿<UserControl xmlns="https://github.com/avaloniaui"
-             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-             xmlns:vm="using:Siua.ViewModels"
-             xmlns:suki="https://github.com/kikipoulet/SukiUI"
-             xmlns:icons="clr-namespace:Material.Icons.Avalonia;assembly=Material.Icons.Avalonia"
-             mc:Ignorable="d" d:DesignWidth="920" d:DesignHeight="700"
-             x:Class="Siua.Views.Pages.CourseEditView"
-             x:DataType="vm:CourseEditViewModel">
-    <ScrollViewer HorizontalScrollBarVisibility="Disabled">
-        <StackPanel Margin="26" Spacing="18" MaxWidth="940" HorizontalAlignment="Stretch">
-            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
-                <Button Classes="Flat Icon" Width="38" Height="38" Command="{Binding CloseCommand}"
-                        ToolTip.Tip="返回设置">
-                    <icons:MaterialIcon Kind="ArrowLeft" Width="22" Height="22"/>
-                </Button>
-                <StackPanel Grid.Column="1" Spacing="3" VerticalAlignment="Center">
-                    <TextBlock Text="课程地址管理" FontSize="27" FontWeight="SemiBold"/>
-                    <TextBlock FontSize="14" Foreground="{DynamicResource SukiLowText}">
-                        <Run Text="当前平台："/><Run Text="{Binding Settings.CurrentPlatform}"/>
-                        <Run Text=" · 每个平台的课程地址独立保存"/>
-                    </TextBlock>
-                </StackPanel>
-            </Grid>
-
-            <suki:GlassCard CornerRadius="14">
-                <suki:BusyArea IsBusy="{Binding IsSaving}">
-                    <StackPanel Spacing="14">
-                        <StackPanel Orientation="Horizontal" Spacing="9">
-                            <icons:MaterialIcon Kind="LinkPlus" Width="22" Height="22"
-                                                Foreground="{DynamicResource SukiPrimaryColor}"/>
-                            <TextBlock Text="添加课程" FontSize="17" FontWeight="SemiBold"/>
-                        </StackPanel>
-                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
-                            <TextBox Text="{Binding NewCourse}" Classes="clearButton"
-                                     Watermark="粘贴课程完整地址，例如：https://..."
-                                     suki:TextBoxExtensions.Prefix="{icons:MaterialIconExt Kind=Link}"/>
-                            <Button Grid.Column="1" Classes="Flat" MinWidth="112" Content="添加"
-                                    Command="{Binding AddCourseCommand}"
-                                    suki:ButtonExtensions.Icon="{icons:MaterialIconExt Kind=Add}"/>
-                        </Grid>
-                        <TextBlock Text="{Binding CourseValidationMessage}" FontSize="12"
-                                   Foreground="{DynamicResource SukiLowText}"/>
-                    </StackPanel>
-                </suki:BusyArea>
-            </suki:GlassCard>
-
-            <Grid ColumnDefinitions="2*,*" ColumnSpacing="18">
-                <suki:GlassCard CornerRadius="14">
-                    <Grid RowDefinitions="Auto,*,Auto" RowSpacing="13" MinHeight="330">
-                        <Grid ColumnDefinitions="*,Auto">
-                            <StackPanel Orientation="Horizontal" Spacing="9">
-                                <icons:MaterialIcon Kind="BookOpenVariant" Width="22" Height="22"
-                                                    Foreground="{DynamicResource SukiPrimaryColor}"/>
-                                <TextBlock Text="课程列表" FontSize="17" FontWeight="SemiBold"/>
-                            </StackPanel>
-                            <TextBlock Grid.Column="1" VerticalAlignment="Center"
-                                       Foreground="{DynamicResource SukiLowText}">
-                                <Run Text="共 "/><Run Text="{Binding Settings.Courses.Count}"/><Run Text=" 项"/>
-                            </TextBlock>
-                        </Grid>
-                        <ListBox Grid.Row="1" ItemsSource="{Binding Settings.Courses}"
-                                 SelectedItem="{Binding SelectedCourse}"/>
-                        <Grid Grid.Row="2" ColumnDefinitions="*,Auto">
-                            <TextBlock Text="选择列表中的课程后可删除" FontSize="12"
-                                       VerticalAlignment="Center" Foreground="{DynamicResource SukiLowText}"/>
-                            <Button Grid.Column="1" Classes="Flat" Content="删除选中"
-                                    Command="{Binding RemoveCourseCommand}"
-                                    suki:ButtonExtensions.Icon="{icons:MaterialIconExt Kind=DeleteOutline}"/>
-                        </Grid>
-                    </Grid>
-                </suki:GlassCard>
-
-                <suki:GlassCard Grid.Column="1" CornerRadius="14">
-                    <StackPanel Spacing="12">
-                        <icons:MaterialIcon Kind="InformationOutline" Width="30" Height="30"
-                                            Foreground="{DynamicResource SukiPrimaryColor}"/>
-                        <TextBlock Text="填写建议" FontSize="17" FontWeight="SemiBold"/>
-                        <TextBlock Text="请使用进入课程后的完整地址，不要填写平台首页或登录页。"
-                                   TextWrapping="Wrap" FontSize="13" LineHeight="20"
-                                   Foreground="{DynamicResource SukiLowText}"/>
-                        <Separator/>
-                        <TextBlock Text="不同平台的课程地址会在后续适配器中分别识别。当前只有学习通任务可直接启动。"
-                                   TextWrapping="Wrap" FontSize="13" LineHeight="20"
-                                   Foreground="{DynamicResource SukiLowText}"/>
-                    </StackPanel>
-                </suki:GlassCard>
-            </Grid>
-        </StackPanel>
-    </ScrollViewer>
+<UserControl xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+ xmlns:vm="using:Siua.ViewModels" xmlns:suki="https://github.com/kikipoulet/SukiUI"
+ xmlns:icons="clr-namespace:Material.Icons.Avalonia;assembly=Material.Icons.Avalonia"
+ x:Class="Siua.Views.Pages.CourseEditView" x:DataType="vm:CourseEditViewModel">
+ <Grid Margin="28,24" RowDefinitions="Auto,Auto,*" RowSpacing="24">
+  <Grid ColumnDefinitions="*,160" ColumnSpacing="20"><StackPanel Spacing="6"><TextBlock Text="课程管理" Classes="web-title"/><TextBlock Text="集中维护课程链接，在工作台选择需要执行的课程。" Classes="web-muted"/></StackPanel><ComboBox Grid.Column="1" ItemsSource="{Binding Platforms}" SelectedItem="{Binding Settings.CurrentPlatform}" HorizontalAlignment="Stretch" VerticalAlignment="Center"/></Grid>
+  <Border Grid.Row="1" Classes="panel">
+   <suki:BusyArea IsBusy="{Binding IsSaving}"><StackPanel Spacing="12"><TextBlock Text="添加课程" Classes="web-section"/>
+    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12"><TextBox Text="{Binding NewCourse}" PlaceholderText="粘贴进入课程后的完整地址：https://..."/><Button Grid.Column="1" Classes="web primary" Content="＋  添加课程" Command="{Binding AddCourseCommand}"/></Grid>
+    <TextBlock Text="{Binding CourseValidationMessage}" Classes="web-muted"/>
+   </StackPanel></suki:BusyArea>
+  </Border>
+  <Border Grid.Row="2" Classes="panel" Padding="0">
+   <Grid RowDefinitions="Auto,*,Auto">
+    <Border BorderBrush="{DynamicResource WebBorder}" BorderThickness="0,0,0,1" Padding="20,16"><Grid ColumnDefinitions="*,Auto"><TextBlock Text="课程链接" Classes="web-section"/><TextBlock Grid.Column="1" Classes="web-muted"><Run Text="共 "/><Run Text="{Binding Settings.Courses.Count}"/><Run Text=" 门课程"/></TextBlock></Grid></Border>
+    <Grid Grid.Row="1" Margin="12">
+     <ListBox ItemsSource="{Binding Settings.Courses}" SelectedItem="{Binding SelectedCourse}" Classes="web-nav">
+      <ListBox.ItemTemplate><DataTemplate x:DataType="x:String"><Grid ColumnDefinitions="24,*" ColumnSpacing="12"><icons:MaterialIcon Kind="LinkVariant" Width="18" Height="18" Foreground="{DynamicResource WebMuted}"/><TextBlock Grid.Column="1" Text="{Binding}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding}"/></Grid></DataTemplate></ListBox.ItemTemplate>
+     </ListBox>
+     <StackPanel IsVisible="{Binding !Settings.Courses.Count}" VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="10"><icons:MaterialIcon Kind="BookOpenPageVariantOutline" Width="32" Height="32" Foreground="{DynamicResource WebMuted}" HorizontalAlignment="Center"/><TextBlock Text="还没有课程链接" Classes="web-section" HorizontalAlignment="Center"/><TextBlock Text="在上方粘贴课程地址，添加你的第一门课程。" Classes="web-muted"/></StackPanel>
+    </Grid>
+    <Border Grid.Row="2" BorderBrush="{DynamicResource WebBorder}" BorderThickness="0,1,0,0" Padding="20,12"><Grid ColumnDefinitions="*,Auto"><TextBlock Text="请使用课程页面地址，不要填写平台首页或登录页。" Classes="web-muted" VerticalAlignment="Center"/><Button Grid.Column="1" Classes="web danger" Content="删除选中" Command="{Binding RemoveCourseCommand}"/></Grid></Border>
+   </Grid>
+  </Border>
+ </Grid>
 </UserControl>

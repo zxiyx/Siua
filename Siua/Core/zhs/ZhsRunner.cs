@@ -245,7 +245,7 @@ public sealed class ZhsRunner
                     // 新版按选项控件 ID 重映射；旧版保留正文匹配。
                     var selected = question.Answers.Where(option => answers.Any(answer =>
                         string.IsNullOrEmpty(answer.Value)
-                            ? (chapterTest.IsStudyVideo ? option.Marker == answer.Marker : option.Text == answer.Text)
+                            ? (chapterTest.UsesModernExam ? option.Marker == answer.Marker : option.Text == answer.Text)
                             : option.Value == answer.Value && option.Text == answer.Text)).ToArray();
                     if (selected.Length != answers.Count)
                         return DisableAutoTest("区域截图后的选项发生变化，已停止答题");
@@ -255,7 +255,7 @@ public sealed class ZhsRunner
                 else if (!await AnswerQuestionAsync(question, index + 1, cancellationToken))
                     return false;
 
-                if (!chapterTest.IsStudyVideo)
+                if (!chapterTest.UsesModernExam)
                     savedAnswers.Add(question.Key, await question.ReadAnswerStateAsync());
                 processedCount++;
                 if (chapterAnswers is null && !_settings.RandomTest)
@@ -275,13 +275,13 @@ public sealed class ZhsRunner
                     $"智慧树章节测试题目数量异常：应处理 {questionCount} 题，实际处理 {processedCount} 题");
             }
 
-            if (!chapterTest.IsStudyVideo)
+            if (!chapterTest.UsesModernExam)
                 await chapterTest.VerifySavedAnswersAsync(examPage, savedAnswers, cancellationToken);
             await chapterTest.SubmitAsync(
                 examPage,
                 _settings.PopupTimeout,
                 cancellationToken);
-            if (chapterTest.IsStudyVideo)
+            if (chapterTest.UsesModernExam)
             {
                 var score = await chapterTest.WaitForScoreAsync(examPage, cancellationToken);
                 LogInfo($"智慧树章节测试提交成功，成绩：{score}");

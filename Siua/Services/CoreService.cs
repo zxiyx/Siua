@@ -40,6 +40,10 @@ public sealed class CoreService : ICoreService
     private int _sessionEnded;
     private int _isDisposing;
     private bool _loginInProgress;
+    private LoginAccount? _loginAccount;
+    private long _loginEpoch;
+    private long _loginVersion;
+    public bool CompletedSuccessfully { get; private set; }
     // 登录恢复不能与刷课任务同时导航同一个页面。
     private readonly SemaphoreSlim _zhsPageGate = new(1, 1);
     private static readonly SemaphoreSlim ChromiumInstallGate = new(1, 1);
@@ -61,6 +65,7 @@ public sealed class CoreService : ICoreService
         DisposeBrowserResources();
         _sessionCts = new CancellationTokenSource();
         Interlocked.Exchange(ref _sessionEnded, 0);
+        CompletedSuccessfully = false;
         _logService.Clear();
         var platform = _settings.CurrentPlatform;
         if (!LearningPlatformCatalog.IsSupported(platform))
@@ -91,9 +96,21 @@ public sealed class CoreService : ICoreService
         _logService.AddLog($"正在启动「{platform}」任务");
 
         var startupToken = GetSessionToken();
+        SemaphoreSlim? loginGate = null;
+        var loginGateEntered = false;
         try
         {
+            _loginAccount = loginAccount is { RememberLogin: true } ? loginAccount : null;
+            if (_loginAccount is not null)
+            {
+                _loginEpoch = _settings.RunLoginEpoch ?? _settings.LoginStates.Epoch(_loginAccount);
+                loginGate = _settings.LoginStates.LoginGate(_loginAccount);
+                _logService.AddLog("等待同账号登录会话...");
+                await loginGate.WaitAsync(startupToken);
+                loginGateEntered = true;
+            }
             _playwright = await Playwright.CreateAsync();
+            startupToken.ThrowIfCancellationRequested();
             var browserType = _playwright.Chromium;
             var browserOptions = CreateBrowserOptions();
             if (_settings.BrowserCannel == "系统默认" && browserOptions.ExecutablePath is null)
@@ -104,7 +121,23 @@ public sealed class CoreService : ICoreService
             }
             startupToken.ThrowIfCancellationRequested();
             _browser = await browserType.LaunchAsync(browserOptions);
-            _page = await _browser.NewPageAsync();
+            startupToken.ThrowIfCancellationRequested();
+            string? storageState = null;
+            if (_loginAccount is not null)
+            {
+                try { storageState = _settings.LoginStates.Read(_loginAccount, _loginEpoch, out _loginVersion); }
+                catch { _logService.AddLog("已保存的登录状态无法读取，本次重新登录"); }
+            }
+            IBrowserContext context;
+            try { context = await _browser.NewContextAsync(new() { StorageState = storageState }); }
+            catch (PlaywrightException) when (storageState is not null && !startupToken.IsCancellationRequested)
+            {
+                _logService.AddLog("已保存的登录状态不可用，本次重新登录");
+                context = await _browser.NewContextAsync();
+            }
+            startupToken.ThrowIfCancellationRequested();
+            _page = await context.NewPageAsync();
+            startupToken.ThrowIfCancellationRequested();
             RegisterSessionEvents(_browser, _page, _sessionCts);
             _loginInProgress = true;
 
@@ -150,11 +183,13 @@ public sealed class CoreService : ICoreService
             _logService.AddLog(platform == LearningPlatformCatalog.ZhiHuiShu
                 ? "登录成功，目标课程已加载" : "登录成功");
             _loginInProgress = false;
+            await SaveLoginStateAsync();
             StartLoginHeartbeat();
             return true;
         }
         catch (OperationCanceledException) when (startupToken.IsCancellationRequested)
         {
+            DisposeBrowserResources();
             return false;
         }
         catch (Exception exception) when (!IsSessionActive || exception is PlaywrightException)
@@ -169,6 +204,25 @@ public sealed class CoreService : ICoreService
             DisposeBrowserResources();
             return false;
         }
+        finally
+        {
+            if (loginGateEntered) loginGate!.Release();
+        }
+    }
+
+    public async Task SaveLoginStateAsync()
+    {
+        var page = _page;
+        var account = _loginAccount;
+        if (account is null || page is null || !IsSessionActive || _loginInProgress || IsLoginPage(page.Url)) return;
+        try
+        {
+            var state = await page.Context.StorageStateAsync();
+            if (!ReferenceEquals(page, _page) || !IsSessionActive) return;
+            if (_settings.LoginStates.Save(account, _loginEpoch, ref _loginVersion, state))
+                _logService.AddLog("登录状态已在本机加密保存");
+        }
+        catch { _logService.AddLog("登录状态保存失败，本次任务继续运行；下次可能需要重新登录"); }
     }
 
     public bool IsSessionActive =>
@@ -179,10 +233,12 @@ public sealed class CoreService : ICoreService
     private async Task SubmitSavedLoginAsync(IPage page, string platform, LoginAccount account,
         CancellationToken cancellationToken)
     {
-        string? password = null;
-        try { password = AccountPasswordService.Unprotect(account.EncryptedPassword); }
-        catch { _logService.AddLog("已保存的密码无法读取，请重新编辑账号；本次可在浏览器中手动登录"); }
-        if (string.IsNullOrEmpty(password)) return;
+        var password = account.Password;
+        if (string.IsNullOrEmpty(password))
+        {
+            _logService.AddLog("此账号未保存密码，请在浏览器中完成登录");
+            return;
+        }
         if (platform == LearningPlatformCatalog.ZhiHuiShu)
             await ZhsLoginService.SubmitOnceAsync(page, account.Username, password, _logService, cancellationToken);
         else if (platform == LearningPlatformCatalog.XueXiTong)
@@ -226,7 +282,7 @@ public sealed class CoreService : ICoreService
                 _logService,
                 _ocrService,
                 _aiControlService);
-            await _zhsRunner.RunAsync(cancellationToken);
+            CompletedSuccessfully = await _zhsRunner.RunAsync(cancellationToken);
         }
         catch (OperationCanceledException) when (!IsSessionActive)
         {
@@ -268,7 +324,9 @@ public sealed class CoreService : ICoreService
                 _logService,
                 _ocrService,
                 _aiControlService);
-            return await _xxtRunner.RunAsync(cancellationToken) && IsSessionActive;
+            var more = await _xxtRunner.RunAsync(cancellationToken);
+            CompletedSuccessfully = _xxtRunner.CompletedSuccessfully;
+            return more && IsSessionActive;
         }
         catch (OperationCanceledException) when (!IsSessionActive)
         {
@@ -433,6 +491,7 @@ public sealed class CoreService : ICoreService
                 var page = _page;
                 if (page is null || !RequiresLoginRecovery(page.Url))
                 {
+                    await SaveLoginStateAsync();
                     continue;
                 }
 

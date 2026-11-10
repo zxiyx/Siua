@@ -7,8 +7,9 @@
              RequestedThemeVariant="Light">
     <Application.Styles>
         <FluentTheme />
-        <sukiUi:SukiTheme ThemeColor="Red"/>
+        <sukiUi:SukiTheme ThemeColor="Blue"/>
         <StyleInclude Source="Styles/icons.axaml" />
         <icons:MaterialIconStyles />
+        <StyleInclude Source="Styles/WebUI.axaml" />
     </Application.Styles>
 </Application>

@@ -26,6 +26,7 @@ public partial class AiSettingsViewModel:ObservableObject
         AiProviderService.Providers.ToDictionary(p => p.Provider, p => p);
     [ObservableProperty] private bool _isAdding;
     public bool IsCustom => SelectedProvider == "自定义";
+    public string[] Providers { get; } = AiProviderService.Providers.Select(p => p.Provider).Append("自定义").ToArray();
     [ObservableProperty]
     private string _selectedProvider = string.Empty;
     

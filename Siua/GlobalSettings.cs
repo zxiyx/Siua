@@ -30,6 +30,11 @@ public partial class GlobalSettings : ObservableObject, IDisposable
     private bool _isLoading;
     private bool _isInitialized;
     private int _isDisposed;
+    private bool _transient;
+    [JsonIgnore] public LoginStateStore LoginStates { get; private set; }
+    [JsonIgnore] public long? RunLoginEpoch { get; private set; }
+    [ObservableProperty] private bool _multiCourseMode;
+    [ObservableProperty] private int _maxConcurrentCourses = 2;
 
     [ObservableProperty] private string _currentPlatform = "学习通";
     [ObservableProperty] private string _pix2TextExecutablePath = Path.Combine("Pix2TextRuntime", "Scripts", "p2t.exe");
@@ -61,6 +66,7 @@ public partial class GlobalSettings : ObservableObject, IDisposable
     public GlobalSettings(string? storageDirectory = null)
     {
         _storage = new SettingsStorageService(storageDirectory);
+        LoginStates = new LoginStateStore(_storage.StorageDirectory);
         UserDataDir = Path.Combine(_storage.StorageDirectory, "UserData");
         Directory.CreateDirectory(UserDataDir);
         _coursesByPlatform[CurrentPlatform] = Courses;
@@ -101,6 +107,7 @@ public partial class GlobalSettings : ObservableObject, IDisposable
     public Task SaveToJson()
     {
         ThrowIfDisposed();
+        if (_transient) return Task.CompletedTask;
         return _storage.SaveAsync(CreateSnapshot());
     }
 
@@ -119,7 +126,7 @@ public partial class GlobalSettings : ObservableObject, IDisposable
         CancelScheduledSave();
 
         // 最后一次落盘不重新开放已释放的设置对象。
-        _storage.SaveAsync(CreateSnapshot()).GetAwaiter().GetResult();
+        if (!_transient) _storage.SaveAsync(CreateSnapshot()).GetAwaiter().GetResult();
     }
 
     partial void OnCoursesChanging(ObservableCollection<string> value)
@@ -262,6 +269,8 @@ public partial class GlobalSettings : ObservableObject, IDisposable
 
     private SettingsSnapshot CreateSnapshot() => new()
     {
+        MultiCourseMode = MultiCourseMode,
+        MaxConcurrentCourses = Math.Clamp(MaxConcurrentCourses, 1, 8),
         CurrentPlatform = CurrentPlatform,
         Pix2TextExecutablePath = Pix2TextExecutablePath,
         Pix2TextHost = Pix2TextHost,
@@ -295,6 +304,8 @@ public partial class GlobalSettings : ObservableObject, IDisposable
 
     private void ApplySnapshot(SettingsSnapshot snapshot)
     {
+        MultiCourseMode = snapshot.MultiCourseMode;
+        MaxConcurrentCourses = Math.Clamp(snapshot.MaxConcurrentCourses, 1, 8);
         var currentPlatform = ValueOrDefault(snapshot.CurrentPlatform, LearningPlatformCatalog.XueXiTong);
         _coursesByPlatform.Clear();
         foreach (var pair in snapshot.CoursesByPlatform ?? [])
@@ -359,6 +370,15 @@ public partial class GlobalSettings : ObservableObject, IDisposable
 
     private static string ValueOrDefault(string? value, string fallback) =>
         string.IsNullOrWhiteSpace(value) ? fallback : value;
+
+    /// <summary>运行中的任务使用独立配置；释放快照绝不覆盖用户设置。</summary>
+    public GlobalSettings CreateRunSnapshot()
+    {
+        var copy = new GlobalSettings(_storage.StorageDirectory) { _transient = true, LoginStates = LoginStates };
+        copy.ApplySnapshot(CreateSnapshot());
+        if (copy.GetSelectedLoginAccount() is { } account) copy.RunLoginEpoch = LoginStates.Epoch(account);
+        return copy;
+    }
 
     private ObservableCollection<string> GetOrCreateCourses(string platform)
     {
