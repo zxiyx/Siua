@@ -17,12 +17,14 @@ public sealed class ZhsPageResolver
         "div.video-main div.video-play #container video.vjs-tech";
 
     private readonly IPage _page;
+    private readonly Action<string>? _log;
     private ILocator? _mainContainer;
     public bool IsStudyVideo { get; private set; }
 
-    public ZhsPageResolver(IPage page)
+    public ZhsPageResolver(IPage page, Action<string>? log = null)
     {
         _page = page;
+        _log = log;
     }
 
     public async Task<bool> WaitLoadingAsync(CancellationToken cancellationToken = default)
@@ -42,7 +44,7 @@ public sealed class ZhsPageResolver
             });
             _mainContainer = IsStudyVideo ? _page.Locator("body") : mainContainer;
             if (IsStudyVideo)
-                await new ZhsStudyVideoPage(_page).CloseStudyPopupsAsync(cancellationToken);
+                await new ZhsStudyVideoPage(_page, _log).CloseStudyPopupsAsync(cancellationToken);
             return true;
         }
         catch (Exception exception) when (exception is PlaywrightException or TimeoutException)

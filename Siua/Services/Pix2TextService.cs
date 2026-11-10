@@ -34,10 +34,52 @@ public sealed class Pix2TextService : IDisposable
     private readonly string _installRoot;
     private bool _disposed;
 
-    private const string ServerBootstrap =
-        "import sys; from pix2text.serve import start_server; " +
-        "config={'total_configs':{'layout':{},'text_formula':{'languages':['en','ch_sim'],'mfd':{},'formula':{},'text':{}}},'enable_formula':True,'enable_table':False,'device':'cpu'}; " +
-        "start_server(config, 'output-md-root', host=sys.argv[1], port=int(sys.argv[2]), reload=False)";
+    private const string ServerBootstrap = """
+        import os, sys
+        from pathlib import Path
+        from pix2text.serve import start_server
+        from pix2text.consts import AVAILABLE_MODELS, MODEL_VERSION
+        from pix2text.utils import data_dir
+        from pix2text.formula_detector import find_files
+
+        def prepare_mfd():
+            info = AVAILABLE_MODELS.get_info('mfd-1.5', 'onnx')
+            directory = Path(data_dir()) / MODEL_VERSION / info['local_model_id']
+            def candidates():
+                valid = []
+                for path in find_files(directory, '.onnx'):
+                    path = Path(path)
+                    if not path.is_file() or path.stat().st_size == 0:
+                        continue
+                    with path.open('rb') as stream:
+                        if stream.read(80).startswith(b'version https://git-lfs.github.com/spec/'):
+                            continue
+                    valid.append(path)
+                return valid
+            files = candidates()
+            if files:
+                return str(files[0])
+            print('[Pix2Text模型] 公式检测模型缺失或下载不完整，正在补下载...', flush=True)
+            from huggingface_hub import snapshot_download
+            last_error = None
+            for endpoint in dict.fromkeys([os.environ.get('HF_ENDPOINT') or 'https://huggingface.co', 'https://hf-mirror.com']):
+                try:
+                    # 直接补齐权重，避免上游因目录已有 README 等文件而跳过下载。
+                    snapshot_download(repo_id=info['hf_model_id'], local_dir=str(directory),
+                                      allow_patterns=['*mfd*.onnx'], force_download=True, endpoint=endpoint)
+                    files = candidates()
+                    if not files:
+                        raise FileNotFoundError('下载后仍缺少公式检测模型: ' + str(directory))
+                    print('[Pix2Text模型] 公式检测模型已补齐', flush=True)
+                    return str(files[0])
+                except Exception as error:
+                    last_error = error
+                    print('[Pix2Text模型] 下载失败 (' + endpoint + '): ' + str(error), file=sys.stderr, flush=True)
+            raise RuntimeError('公式检测模型补下载失败，请检查网络后重新启动 Pix2Text: ' + str(directory)) from last_error
+
+        config={'total_configs':{'layout':{},'text_formula':{'languages':['en','ch_sim'],'mfd':{'model_path':prepare_mfd()},'formula':{},'text':{}}},'enable_formula':True,'enable_table':False,'device':'cpu'}
+        start_server(config, 'output-md-root', host=sys.argv[1], port=int(sys.argv[2]), reload=False)
+        """;
 
     public bool IsReady { get; private set; }
     public string? ErrorMessage { get; private set; }
@@ -222,7 +264,7 @@ public sealed class Pix2TextService : IDisposable
                     }
                 });
                 cancellationToken.ThrowIfCancellationRequested();
-                LogInfo($"正在启动 Pix2Text（{serviceUri.Authority}），首次加载模型可能需要较长时间...");
+                LogInfo($"正在启动 Pix2Text（{serviceUri.Authority}），将检查并补下载缺失的公式检测模型，首次加载可能需要较长时间...");
             }
             else
             {

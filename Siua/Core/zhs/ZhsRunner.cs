@@ -38,7 +38,7 @@ public sealed class ZhsRunner
 
     public async Task<bool> RunAsync(CancellationToken cancellationToken = default)
     {
-        var resolver = new ZhsPageResolver(_page);
+        var resolver = new ZhsPageResolver(_page, LogInfo);
         if (!await resolver.WaitLoadingAsync(cancellationToken))
         {
             LogError("智慧树课程页面加载失败");
@@ -138,7 +138,7 @@ public sealed class ZhsRunner
         if (resolver.IsStudyVideo)
         {
             LogInfo($"正常播放：{await section.GetNameAsync()}");
-            await new ZhsStudyVideoPage(_page).PlaySectionAsync(section, _settings.IsMuted, cancellationToken);
+            await new ZhsStudyVideoPage(_page, LogInfo).PlaySectionAsync(section, _settings.IsMuted, cancellationToken);
             LogInfo("目录已显示小节完成，继续后续任务");
             await Task.Delay(_settings.ChapterJumpInterval, cancellationToken);
             return;
@@ -199,7 +199,7 @@ public sealed class ZhsRunner
             LogInfo("进入智慧树章节测试...");
             if (chapterTest.IsStudyVideo)
             {
-                await new ZhsStudyVideoPage(_page).CloseStudyPopupsAsync(cancellationToken);
+                await new ZhsStudyVideoPage(_page, LogInfo).CloseStudyPopupsAsync(cancellationToken);
                 await new ZhsStudyVideoPage(_page).PauseAsync();
             }
             examPage = await chapterTest.OpenAsync(_page, cancellationToken);

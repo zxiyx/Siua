@@ -7,19 +7,35 @@ using Microsoft.Playwright;
 namespace Siua.Core.Zhs;
 
 /// <summary>新版累计时长课程：通过目录完成标记确认学习结果。</summary>
-public sealed class ZhsStudyVideoPage(IPage page)
+public sealed class ZhsStudyVideoPage(IPage page, Action<string>? log = null)
 {
     private ILocator Video => page.Locator("#vjs_container_html5_api").First;
+    private const string KnownDialogs = ".dialog-warn, .dialog-read, #playTopic-dialog";
+    private const string Dialogs = KnownDialogs + ", .el-dialog__wrapper, .el-message-box__wrapper, [role='dialog'], [aria-modal='true'], dialog[open], .v-modal, div[class*='dialog-']";
 
     public async Task CloseStudyPopupsAsync(CancellationToken cancellationToken = default)
     {
         // 弹题必须先作答才能关闭；不处理考试提交确认或成绩窗口。
-        for (var pass = 0; pass < 3; pass++)
+        while (true)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            var unknown = page.Locator(Dialogs).Filter(new LocatorFilterOptions { Visible = true });
+            // 已知弹窗内的 role=dialog 不是新窗口；独立遮罩仅在没有已知窗口时接管。
+            foreach (var candidate in await unknown.ElementHandlesAsync())
+            {
+                try
+                {
+                    if (!await candidate.EvaluateAsync<bool>("""
+                        (node, known) => !node.closest(known) && !node.querySelector(known) &&
+                            (!node.matches('.v-modal') || ![...document.querySelectorAll(known)].some(n => n.getBoundingClientRect().height > 0))
+                        """, KnownDialogs)) continue;
+                    await WaitForManualCloseAsync(candidate, cancellationToken);
+                }
+                finally { await candidate.DisposeAsync(); }
+            }
             var closed = false;
             var pending = false;
-            Exception? lastFailure = null;
+            ILocator? failedDialog = null;
             foreach (var (selector, closeSelector) in new[]
             {
                 (".dialog-warn", ".talk-later-btn"),
@@ -38,16 +54,34 @@ public sealed class ZhsStudyVideoPage(IPage page)
                     if (selector == "#playTopic-dialog")
                         await AnswerVideoQuizAsync(dialog, cancellationToken);
                     await close.ClickAsync(new LocatorClickOptions { Timeout = 1_000 });
+                    await dialog.WaitForAsync(new LocatorWaitForOptions
+                    { State = WaitForSelectorState.Hidden, Timeout = 5_000 }).WaitAsync(cancellationToken);
                 }
-                catch (TimeoutException exception) { lastFailure = exception; continue; }
-                await dialog.WaitForAsync(new LocatorWaitForOptions
-                { State = WaitForSelectorState.Hidden, Timeout = 5_000 }).WaitAsync(cancellationToken);
+                catch (Exception exception) when (exception is TimeoutException or InvalidOperationException)
+                { failedDialog = dialog; continue; }
                 closed = true;
             }
             if (!pending) return;
             if (!closed)
-                throw new InvalidOperationException("智慧树学习提示窗口无法处理，请检查弹题作答状态或页面提示。", lastFailure);
+            {
+                var element = await failedDialog!.ElementHandleAsync();
+                if (element is null) continue;
+                try { await WaitForManualCloseAsync(element, cancellationToken); }
+                finally { await element.DisposeAsync(); }
+            }
         }
+    }
+
+    private async Task WaitForManualCloseAsync(IElementHandle dialog, CancellationToken token)
+    {
+        if (!await dialog.IsVisibleAsync()) return;
+        log?.Invoke("检测到未适配或无法自动处理的智慧树提示窗口，请在浏览器中手动处理并关闭；程序正在等待，关闭后自动继续。");
+        while (await dialog.IsVisibleAsync())
+        {
+            token.ThrowIfCancellationRequested();
+            await Task.Delay(500, token);
+        }
+        log?.Invoke("提示窗口已关闭，继续当前任务");
     }
 
     private static async Task AnswerVideoQuizAsync(ILocator dialog, CancellationToken token)
@@ -114,7 +148,9 @@ public sealed class ZhsStudyVideoPage(IPage page)
             while (loadTimer.ElapsedMilliseconds < 20_000)
             {
                 cancellationToken.ThrowIfCancellationRequested();
+                loadTimer.Stop();
                 await CloseStudyPopupsAsync(cancellationToken);
+                loadTimer.Start();
                 if (await section.IsCurrentAsync() && await Video.CountAsync() > 0 &&
                     await Video.EvaluateAsync<bool>("v => v.readyState >= 1 && Number.isFinite(v.duration) && v.duration > 0"))
                 {
@@ -142,7 +178,9 @@ public sealed class ZhsStudyVideoPage(IPage page)
         while (timer.ElapsedMilliseconds < timeoutMilliseconds)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            timer.Stop();
             await CloseStudyPopupsAsync(cancellationToken);
+            timer.Start();
             if (await section.IsCompletedAsync(cancellationToken))
             {
                 // 切入测试前停止当前媒体，避免后台继续播放/自动切节。
