@@ -3,7 +3,7 @@
  <ScrollViewer HorizontalScrollBarVisibility="Disabled"><StackPanel Margin="28,24" Spacing="24">
   <StackPanel Spacing="6"><TextBlock Text="关于 Siua" Classes="web-title"/><TextBlock Text="一个清晰、可配置的学习工作区。" Classes="web-muted"/></StackPanel>
   <Border Classes="panel" Padding="32"><StackPanel Spacing="24">
-   <Grid ColumnDefinitions="64,*" ColumnSpacing="22"><Image Source="../../Assets/siua.ico" Width="64" Height="64"/><StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="6"><TextBlock Text="Siua" FontSize="28" FontWeight="Bold"/><TextBlock Text="多平台课程学习助手 · v1.1.6" Classes="web-muted"/></StackPanel></Grid>
+   <Grid ColumnDefinitions="64,*" ColumnSpacing="22"><Image Source="../../Assets/siua.ico" Width="64" Height="64"/><StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="6"><TextBlock Text="Siua" FontSize="28" FontWeight="Bold"/><TextBlock Text="多平台课程学习助手 · v1.1.7" Classes="web-muted"/></StackPanel></Grid>
    <Border Height="1" Background="{DynamicResource WebBorder}"/>
    <TextBlock Text="将课程管理、账号登录、执行策略与运行日志集中在一个工作区。支持学习通和智慧树，按需使用 AI 与本地文字识别服务。" TextWrapping="Wrap" LineHeight="24" MaxWidth="700" HorizontalAlignment="Left"/>
    <Grid ColumnDefinitions="*,*,*" ColumnSpacing="20"><StackPanel Spacing="7"><TextBlock Text="开发者" Classes="web-label"/><TextBlock Text="zxiyx"/></StackPanel><StackPanel Grid.Column="1" Spacing="7"><TextBlock Text="桌面框架" Classes="web-label"/><TextBlock Text="Avalonia + SukiUI"/></StackPanel><StackPanel Grid.Column="2" Spacing="7"><TextBlock Text="自动化引擎" Classes="web-label"/><TextBlock Text="Playwright"/></StackPanel></Grid>

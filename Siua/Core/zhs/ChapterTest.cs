@@ -12,7 +12,6 @@ namespace Siua.Core.Zhs;
 /// <summary>控制智慧树章节测试页面及其提交流程。</summary>
 public sealed class ZhsChapterTest
 {
-    private const string PartTitleSelector = "div.examPaper_partTit.mt20";
     private const string QuestionSelector = "div.examPaper_subject.mt20";
     private const string VisibleQuestionSelector = "div.examPaper_subject.mt20:visible";
     private const string SwitchButtonSelector = "div.switch-btn-box";
@@ -58,6 +57,7 @@ public sealed class ZhsChapterTest
         cancellationToken.ThrowIfCancellationRequested();
 
         IPage examPage;
+        var clicked = false;
         try
         {
             examPage = await coursePage.Context.RunAndWaitForPageAsync(
@@ -65,10 +65,11 @@ public sealed class ZhsChapterTest
                 {
                     await _locator.ScrollIntoViewIfNeededAsync();
                     await _locator.ClickAsync(new LocatorClickOptions { Timeout = 15_000 });
+                    clicked = true;
                 },
                 new BrowserContextRunAndWaitForPageOptions { Timeout = 15_000 });
         }
-        catch (TimeoutException)
+        catch (TimeoutException) when (clicked)
         {
             examPage = coursePage;
         }
@@ -77,17 +78,23 @@ public sealed class ZhsChapterTest
         await examPage.WaitForLoadStateAsync(
             LoadState.DOMContentLoaded,
             new PageWaitForLoadStateOptions { Timeout = 30_000 });
-        await examPage.Locator(PartTitleSelector).First.WaitForAsync(
-            new LocatorWaitForOptions
+        // 成绩页不一定有试卷标题。无题也无成绩时只等待，不能据此判定完成。
+        for (var attempt = 0; attempt < 120; attempt++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (await ReadScoreAsync(examPage, cancellationToken) is not null ||
+                await examPage.Locator(VisibleQuestionSelector).CountAsync() > 0 ||
+                await IsReadOnlyResultAsync(examPage, cancellationToken))
             {
-                State = WaitForSelectorState.Visible,
-                Timeout = 30_000
-            });
-        // 课程目录与试卷版本独立：wisdom-mooc 也会打开军事理论课使用的 H5 试卷。
-        UsesModernExam = IsStudyVideo ||
-            (Uri.TryCreate(examPage.Url, UriKind.Absolute, out var examUri) &&
-             examUri.Host.Equals("onlineexamh5new.zhihuishu.com", StringComparison.OrdinalIgnoreCase));
-        return examPage;
+                // 新标签最初可能是 about:blank，等试卷/成绩出现后再识别最终域名。
+                UsesModernExam = IsStudyVideo ||
+                    (Uri.TryCreate(examPage.Url, UriKind.Absolute, out var examUri) &&
+                     examUri.Host.Equals("onlineexamh5new.zhihuishu.com", StringComparison.OrdinalIgnoreCase));
+                return examPage;
+            }
+            await Task.Delay(250, cancellationToken);
+        }
+        throw new TimeoutException("测试页尚未显示题目或明确成绩，无法确认已完成；已保留页面，请检查登录状态或页面提示。");
     }
 
     public async Task<int> GetQuestionCountAsync(
@@ -231,11 +238,15 @@ public sealed class ZhsChapterTest
 
         var timeout = Math.Max(1, popupTimeout);
         var messageBox = examPage.Locator("div.el-message-box__wrapper:visible").Last;
-        await messageBox.WaitForAsync(new LocatorWaitForOptions
+        for (var waited = 0; ; waited += 100)
         {
-            State = WaitForSelectorState.Visible,
-            Timeout = timeout
-        });
+            cancellationToken.ThrowIfCancellationRequested();
+            // 某些试卷直接显示成绩/满分窗口，不再显示二次确认。
+            if (await ReadScoreAsync(examPage, cancellationToken) is not null) return;
+            if (await messageBox.CountAsync() > 0) break;
+            if (waited >= timeout) throw new TimeoutException("提交后未出现确认窗口或成绩，无法确认提交成功。");
+            await Task.Delay(100, cancellationToken);
+        }
 
         var confirmButton = messageBox
             .Locator("div.el-message-box__btns button")
@@ -251,16 +262,54 @@ public sealed class ZhsChapterTest
 
     public async Task<string> WaitForScoreAsync(IPage examPage, CancellationToken cancellationToken = default)
     {
-        await examPage.Locator(".scoreTipBox").First.WaitForAsync(new LocatorWaitForOptions
-        { State = WaitForSelectorState.Visible, Timeout = 30_000 }).WaitAsync(cancellationToken);
-        var detail = examPage.Locator(".scoreTipBox .scoreDetail").Filter(new LocatorFilterOptions
-        { HasTextRegex = new Regex(@"\d") }).First;
-        await detail.WaitForAsync(new LocatorWaitForOptions
-        { State = WaitForSelectorState.Visible, Timeout = 10_000 }).WaitAsync(cancellationToken);
-        var score = await detail.InnerTextAsync();
-        if (string.IsNullOrWhiteSpace(score))
-            throw new InvalidOperationException("提交后成绩提示为空，请检查考试页面。");
-        return NormalizeText(score);
+        for (var attempt = 0; attempt < 120; attempt++)
+        {
+            if (await ReadScoreAsync(examPage, cancellationToken) is { } score) return score;
+            await Task.Delay(250, cancellationToken);
+        }
+        throw new TimeoutException("提交后未显示明确成绩或满分结果，请检查考试页面。");
+    }
+
+    private static ILocator FullScoreDialog(IPage page) => page.Locator(".dialog-has-ai-training-btn:visible")
+        .Filter(new() { Has = page.Locator(".userinfo .desc").Filter(new() { HasText = "本章测试取得满分" }) });
+
+    public async Task<string?> ReadScoreAsync(IPage examPage, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (await FullScoreDialog(examPage).CountAsync() > 0) return "满分";
+        var detail = examPage.Locator(".scoreTipBox:visible .scoreDetail:visible")
+            .Filter(new() { HasTextRegex = new Regex(@"\d") }).First;
+        return await detail.CountAsync() > 0 ? NormalizeText(await detail.InnerTextAsync().WaitAsync(cancellationToken)) : null;
+    }
+
+    public async Task<bool> IsReadOnlyResultAsync(IPage examPage, CancellationToken cancellationToken = default)
+    {
+        // 已提交样本：操作按钮整体移除，试卷仍存在，所有选项 input 均 disabled。
+        // 同时核对只读控件和稳定状态，防止按钮尚未异步加载时误判完成。
+        for (var sample = 0; sample < 3; sample++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var completed = await examPage.EvaluateAsync<bool>("""
+                () => {
+                    const visible = n => !!n && n.getBoundingClientRect().width > 0 &&
+                        n.getBoundingClientRect().height > 0 && getComputedStyle(n).visibility !== 'hidden';
+                    if (!visible(document.querySelector('.tit_operate_box')) ||
+                        !visible(document.querySelector('.examPaper_box')) ||
+                        !visible(document.querySelector('.examPaper_partTit'))) return false;
+                    if ([...document.querySelectorAll('.operateBtn_box button')].some(n => visible(n) &&
+                        /提交作业|暂存作业/.test(n.textContent))) return false;
+                    if ([...document.querySelectorAll('.el-loading-mask,[aria-busy="true"]')].some(visible)) return false;
+                    const questions = [...document.querySelectorAll('.examPaper_subject.mt20')];
+                    return questions.length > 0 && questions.every(q => {
+                        const inputs = [...q.querySelectorAll('.subject_node input[type=radio],.subject_node input[type=checkbox]')];
+                        return inputs.length > 0 && inputs.every(i => i.disabled);
+                    });
+                }
+                """).WaitAsync(cancellationToken);
+            if (!completed) return false;
+            if (sample < 2) await Task.Delay(250, cancellationToken);
+        }
+        return true;
     }
 
     public async Task VerifySavedAnswersAsync(IPage examPage,
@@ -283,12 +332,18 @@ public sealed class ZhsChapterTest
 
     public async Task ReturnFromScoreAsync(IPage examPage, CancellationToken cancellationToken = default)
     {
-        await examPage.Locator(".scoreTipBox a[title='返回作业考试']").ClickAsync(
-            new LocatorClickOptions { Timeout = 10_000 });
+        var beforeUrl = examPage.Url;
+        var fullScore = FullScoreDialog(examPage);
+        var back = await fullScore.CountAsync() > 0
+            ? fullScore.Locator(".btns button").Filter(new() { HasTextRegex = new Regex(@"^\s*返回作业考试\s*$") }).First
+            : examPage.Locator(".scoreTipBox:visible a[title='返回作业考试']").First;
+        await back.ClickAsync(new LocatorClickOptions { Timeout = 10_000 }).WaitAsync(cancellationToken);
         for (var attempt = 0; attempt < 100; attempt++)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (examPage.IsClosed) return;
+            if (examPage.IsClosed || examPage.Url != beforeUrl ||
+                (await ReadScoreAsync(examPage, cancellationToken) is null &&
+                 await examPage.Locator(".course-catalog, .chapterScrollbar").CountAsync() > 0)) return;
             await Task.Delay(100, cancellationToken);
         }
         throw new TimeoutException("已点击返回作业考试，但考试页未关闭，请检查页面提示。");

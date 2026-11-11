@@ -61,7 +61,8 @@ public sealed class ZhsRunner
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 LogInfo("开始处理章节");
-                await chapter.ExpandAsync(cancellationToken);
+                await new ZhsStudyVideoPage(_page, LogInfo).RunWithPopupHandlingAsync(
+                    () => chapter.ExpandAsync(cancellationToken), cancellationToken);
 
                 foreach (var section in chapter.Sections)
                 {
@@ -94,7 +95,8 @@ public sealed class ZhsRunner
                         continue;
                     }
 
-                    await chapter.ExpandAsync(cancellationToken);
+                    await new ZhsStudyVideoPage(_page, LogInfo).RunWithPopupHandlingAsync(
+                        () => chapter.ExpandAsync(cancellationToken), cancellationToken);
                     if (!await ProcessChapterTestAsync(
                             chapter.ChapterTest!,
                             cancellationToken))
@@ -127,7 +129,8 @@ public sealed class ZhsRunner
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        await chapter.ExpandAsync(cancellationToken);
+        var popups = new ZhsStudyVideoPage(_page, LogInfo);
+        await popups.RunWithPopupHandlingAsync(() => chapter.ExpandAsync(cancellationToken), cancellationToken);
         if (_settings.JumpCompleted && await section.IsCompletedAsync(cancellationToken))
         {
             LogInfo("跳过已完成小节");
@@ -143,7 +146,7 @@ public sealed class ZhsRunner
             await Task.Delay(_settings.ChapterJumpInterval, cancellationToken);
             return;
         }
-        await section.ClickAsync(cancellationToken);
+        await popups.RunWithPopupHandlingAsync(() => section.ClickAsync(cancellationToken), cancellationToken);
         if (!await resolver.WaitForContentLoadAsync(cancellationToken))
         {
             LogError("小节内容加载超时，已跳过当前小节");
@@ -172,7 +175,8 @@ public sealed class ZhsRunner
         if (!await video.WaitForEndAsync(
                 _settings.VideoPlayRate,
                 _settings.IsMuted,
-                cancellationToken: cancellationToken))
+                cancellationToken: cancellationToken,
+                handlePopups: () => popups.CloseStudyPopupsAsync(cancellationToken)))
         {
             LogError("视频结束检测超时，已继续处理后续小节");
             return;
@@ -197,12 +201,25 @@ public sealed class ZhsRunner
                 return true;
             }
             LogInfo("进入智慧树章节测试...");
-            if (chapterTest.IsStudyVideo)
+            var popups = new ZhsStudyVideoPage(_page, LogInfo);
+            await popups.CloseStudyPopupsAsync(cancellationToken);
+            await popups.PauseAsync();
+            await popups.RunWithPopupHandlingAsync(async () =>
+                examPage = await chapterTest.OpenAsync(_page, cancellationToken), cancellationToken);
+            if (examPage is null) throw new InvalidOperationException("测试页面未打开");
+            if (await chapterTest.ReadScoreAsync(examPage, cancellationToken) is { } existingScore)
             {
-                await new ZhsStudyVideoPage(_page, LogInfo).CloseStudyPopupsAsync(cancellationToken);
-                await new ZhsStudyVideoPage(_page).PauseAsync();
+                LogInfo($"该章节测试已有成绩（{existingScore}），不重复提交，返回课程");
+                await chapterTest.ReturnFromScoreAsync(examPage, cancellationToken);
+                succeeded = true;
+                return true;
             }
-            examPage = await chapterTest.OpenAsync(_page, cancellationToken);
+            if (await chapterTest.IsReadOnlyResultAsync(examPage, cancellationToken))
+            {
+                LogInfo("该章节测试已完成：提交作业、暂存作业按钮不可见且试卷为只读状态，返回课程");
+                succeeded = true;
+                return true;
+            }
             var questionCount = await chapterTest.GetQuestionCountAsync(
                 examPage,
                 cancellationToken);

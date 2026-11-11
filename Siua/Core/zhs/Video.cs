@@ -47,12 +47,16 @@ public sealed class ZhsVideo
         double playbackRate,
         bool muted,
         int timeoutMilliseconds = 3_600_000,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        Func<Task>? handlePopups = null)
     {
         var timer = Stopwatch.StartNew();
         while (timer.ElapsedMilliseconds < timeoutMilliseconds)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            timer.Stop();
+            if (handlePopups is not null) await handlePopups();
+            timer.Start();
             if (await HasEndedAsync())
                 return true;
 

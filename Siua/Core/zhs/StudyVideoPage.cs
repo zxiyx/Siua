@@ -6,12 +6,27 @@ using Microsoft.Playwright;
 
 namespace Siua.Core.Zhs;
 
-/// <summary>新版累计时长课程：通过目录完成标记确认学习结果。</summary>
-public sealed class ZhsStudyVideoPage(IPage page, Action<string>? log = null)
+/// <summary>处理智慧树学习弹窗；累计时长课程通过目录标记确认完成。</summary>
+public sealed class ZhsStudyVideoPage(IPage page, Action<string>? log = null, string? diagnosticDirectory = null)
 {
     private ILocator Video => page.Locator("#vjs_container_html5_api").First;
-    private const string KnownDialogs = ".dialog-warn, .dialog-read, #playTopic-dialog";
-    private const string Dialogs = KnownDialogs + ", .el-dialog__wrapper, .el-message-box__wrapper, [role='dialog'], [aria-modal='true'], dialog[open], .v-modal, div[class*='dialog-']";
+    private const string KnownDialogs = ".dialog-warn, .dialog-read, #playTopic-dialog, .ai-class-exercise-dialog";
+    private const string Dialogs = KnownDialogs + ", .el-overlay, .el-dialog__wrapper, .el-message-box__wrapper, [role='dialog'], [aria-modal='true'], dialog[open], .v-modal, div[class*='dialog-']";
+
+    public async Task RunWithPopupHandlingAsync(Func<Task> action, CancellationToken token = default)
+    {
+        while (true)
+        {
+            await CloseStudyPopupsAsync(token);
+            try { await action().WaitAsync(token); return; }
+            catch (TimeoutException) when (!page.IsClosed)
+            {
+                if (await page.Locator(Dialogs).Filter(new() { Visible = true }).CountAsync() == 0) throw;
+                // 点击期间新出现遮罩时处理后重试原操作，不跳过当前小节。
+                await CloseStudyPopupsAsync(token);
+            }
+        }
+    }
 
     public async Task CloseStudyPopupsAsync(CancellationToken cancellationToken = default)
     {
@@ -40,7 +55,8 @@ public sealed class ZhsStudyVideoPage(IPage page, Action<string>? log = null)
             {
                 (".dialog-warn", ".talk-later-btn"),
                 (".dialog-read", ".iconguanbi"),
-                ("#playTopic-dialog", ".dialog-footer .btn, button[aria-label='Close']")
+                ("#playTopic-dialog", ".dialog-footer .btn, button[aria-label='Close']"),
+                (".ai-class-exercise-dialog", ".ai-class-exercise-dialog-header .header-icon")
             })
             {
                 var dialog = page.Locator(selector).First;
@@ -51,6 +67,21 @@ public sealed class ZhsStudyVideoPage(IPage page, Action<string>? log = null)
                 // 学习提示可能叠在一起；被挡住时先尝试另一个关闭按钮。
                 try
                 {
+                    if (selector == ".ai-class-exercise-dialog")
+                    {
+                        try { await AnswerAiExerciseAsync(dialog, cancellationToken); }
+                        catch (Exception exception) when (exception is TimeoutException or InvalidOperationException)
+                        {
+                            var element = await dialog.ElementHandleAsync();
+                            if (element is not null)
+                            {
+                                try { await WaitForManualCloseAsync(element, cancellationToken); }
+                                finally { await element.DisposeAsync(); }
+                            }
+                        }
+                        closed = true;
+                        continue;
+                    }
                     if (selector == "#playTopic-dialog")
                         await AnswerVideoQuizAsync(dialog, cancellationToken);
                     await close.ClickAsync(new LocatorClickOptions { Timeout = 1_000 });
@@ -75,13 +106,33 @@ public sealed class ZhsStudyVideoPage(IPage page, Action<string>? log = null)
     private async Task WaitForManualCloseAsync(IElementHandle dialog, CancellationToken token)
     {
         if (!await dialog.IsVisibleAsync()) return;
-        log?.Invoke("检测到未适配或无法自动处理的智慧树提示窗口，请在浏览器中手动处理并关闭；程序正在等待，关闭后自动继续。");
+        var saved = await ZhsPopupDiagnostics.SaveAsync(dialog, token, diagnosticDirectory);
+        log?.Invoke("检测到未适配或无法自动处理的智慧树提示窗口，请在浏览器中手动处理并关闭；程序正在等待，关闭后自动继续。" + saved);
         while (await dialog.IsVisibleAsync())
         {
             token.ThrowIfCancellationRequested();
             await Task.Delay(500, token);
         }
         log?.Invoke("提示窗口已关闭，继续当前任务");
+    }
+
+    private static async Task AnswerAiExerciseAsync(ILocator dialog, CancellationToken token)
+    {
+        var questions = dialog.Locator(".ques-list .item:visible");
+        if (await questions.CountAsync() == 0) throw new InvalidOperationException("随堂练习尚未加载题目");
+        foreach (var question in await questions.AllAsync())
+        {
+            var options = question.Locator(".option:visible");
+            var count = await options.CountAsync();
+            if (count == 0) throw new InvalidOperationException("随堂练习没有可选项");
+            // 仅随机点击控件；不读取题干、选项正文或正确答案，不调用 AI/OCR。
+            await options.Nth(Random.Shared.Next(count)).ClickAsync(new() { Timeout = 1_000 }).WaitAsync(token);
+        }
+        await dialog.Locator(".el-dialog__footer button.btn").First.ClickAsync(new() { Timeout = 1_000 }).WaitAsync(token);
+        await Task.Delay(500, token);
+        if (await dialog.IsVisibleAsync())
+            await dialog.Locator(".ai-class-exercise-dialog-header .header-icon").ClickAsync(new() { Timeout = 1_000 }).WaitAsync(token);
+        await dialog.WaitForAsync(new() { State = WaitForSelectorState.Hidden, Timeout = 5_000 }).WaitAsync(token);
     }
 
     private static async Task AnswerVideoQuizAsync(ILocator dialog, CancellationToken token)
