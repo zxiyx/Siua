@@ -207,16 +207,9 @@ public sealed class ZhsRunner
             await popups.RunWithPopupHandlingAsync(async () =>
                 examPage = await chapterTest.OpenAsync(_page, cancellationToken), cancellationToken);
             if (examPage is null) throw new InvalidOperationException("测试页面未打开");
-            if (await chapterTest.ReadScoreAsync(examPage, cancellationToken) is { } existingScore)
+            if (chapterTest.IsWisdomMooc && await chapterTest.IsWisdomTestCompletedAsync(examPage, cancellationToken))
             {
-                LogInfo($"该章节测试已有成绩（{existingScore}），不重复提交，返回课程");
-                await chapterTest.ReturnFromScoreAsync(examPage, cancellationToken);
-                succeeded = true;
-                return true;
-            }
-            if (await chapterTest.IsReadOnlyResultAsync(examPage, cancellationToken))
-            {
-                LogInfo("该章节测试已完成：提交作业、暂存作业按钮不可见且试卷为只读状态，返回课程");
+                LogInfo("该章节测试已完成：成绩控件可见或提交、暂存按钮不可见且试卷为只读状态，返回课程");
                 succeeded = true;
                 return true;
             }
@@ -301,7 +294,7 @@ public sealed class ZhsRunner
             if (chapterTest.UsesModernExam)
             {
                 var score = await chapterTest.WaitForScoreAsync(examPage, cancellationToken);
-                LogInfo($"智慧树章节测试提交成功，成绩：{score}");
+                LogInfo(chapterTest.IsWisdomMooc ? $"智慧树章节测试提交成功（{score}）" : $"智慧树章节测试提交成功，成绩：{score}");
                 await chapterTest.ReturnFromScoreAsync(examPage, cancellationToken);
             }
             else LogInfo("智慧树章节测试提交成功");
@@ -312,6 +305,14 @@ public sealed class ZhsRunner
         catch (OperationCanceledException)
         {
             throw;
+        }
+        catch (Exception exception) when (exception is ZhsExamPageUnavailableException ||
+            exception is PlaywrightException playwrightException &&
+            (ZhsExamPageOpening.IsTargetClosed(playwrightException) || ZhsExamPageOpening.IsNavigationInterrupted(playwrightException)))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            LogError($"智慧树章节测试页面关闭或跳转未完成，已停止本次课程任务；保留答题设置，请检查浏览器后重试。{exception.Message}");
+            return false;
         }
         catch (Exception exception)
         {
